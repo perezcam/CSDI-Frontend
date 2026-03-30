@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Settings as SettingsIcon, Save, Info } from 'lucide-react';
+import { Settings as SettingsIcon, Save, Info, AlertCircle } from 'lucide-react';
 import { Slider } from '../components/ui/slider';
 import { Switch } from '../components/ui/switch';
 import { Button } from '../components/ui/button';
@@ -28,7 +28,9 @@ export function Settings() {
   const [candidateK, setCandidateK] = useState([20]);
 
   const handleSave = () => {
-    toast.success('Configuración guardada correctamente');
+    // No hay endpoint de configuración en el backend todavía.
+    // Los cambios son locales a esta sesión del navegador.
+    toast.info('Configuración aplicada localmente. Para persistir en el backend, agrega POST /api/v1/config al RAG Engine.');
   };
 
   const InfoTooltip = ({ text }: { text: string }) => (
@@ -62,6 +64,14 @@ export function Settings() {
       {/* Content */}
       <div className="px-6 py-8">
         <div className="max-w-4xl mx-auto space-y-6">
+          {/* No-backend warning */}
+          <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-4 flex items-start gap-3">
+            <AlertCircle className="w-5 h-5 text-yellow-400 flex-shrink-0 mt-0.5" />
+            <p className="text-sm text-yellow-300">
+              Los cambios son <span className="font-semibold">locales a esta sesión</span>. Para que afecten al pipeline RAG necesitas agregar{' '}
+              <code className="bg-yellow-500/20 px-1 rounded text-yellow-200">POST /api/v1/config</code> al backend.
+            </p>
+          </div>
           {/* Hybrid Search Weights */}
           <div className="bg-[#0f1419] border border-[#1a2332] rounded-lg p-6">
             <div className="flex items-center gap-2 mb-6">
