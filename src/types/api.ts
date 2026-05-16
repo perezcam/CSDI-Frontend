@@ -4,6 +4,7 @@
 
 export interface RagQueryRequest {
   query: string;
+  session_id?: string;
 }
 
 export interface RagSource {
@@ -19,6 +20,20 @@ export interface RagQueryResponse {
   model: string;
   prompt_tokens: number;
   completion_tokens: number;
+}
+
+export interface RagHistoryMessage {
+  id: string;
+  type: 'user' | 'assistant';
+  content: string;
+  timestamp: string;
+  sources?: RagSource[];
+  model?: string;
+}
+
+export interface RagHistoryResponse {
+  session_id: string;
+  messages: RagHistoryMessage[];
 }
 
 // ─── Search ───────────────────────────────────────────────────────────────────
@@ -85,6 +100,19 @@ export interface ConfiguredSource {
   technology: string[];
   seed_urls: string[];
   max_depth: number;
+  indexed_chunks: number;
+}
+
+export interface PipelineConfig {
+  bm25_weight: number;
+  vector_weight: number;
+  temperature: number;
+  model: string;
+  reranker_enabled: boolean;
+  llm_base_url: string;
+  llm_api_key: string;
+  provider: string;
+  available_models: string[];
 }
 
 // ─── Health ───────────────────────────────────────────────────────────────────
