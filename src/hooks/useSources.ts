@@ -43,11 +43,13 @@ export function useSources() {
     );
     try {
       const report = await sourcesService.ingest({ source_id: sourceId });
+      const latest = await sourcesService.list();
       setSources(prev =>
-        prev.map(s =>
-          s.source_id === sourceId
-            ? {
-                ...s,
+        prev.map(s => ({
+            ...s,
+            ...(latest.find(item => item.source_id === s.source_id) ?? {}),
+            ...(s.source_id === sourceId
+              ? {
                 ingestStatus: 'completed' as IngestStatus,
                 lastIngest: new Date(),
                 lastReport: {
@@ -55,8 +57,8 @@ export function useSources() {
                   chunksIndexed: report.chunks_indexed,
                 },
               }
-            : s,
-        ),
+              : {}),
+          })),
       );
     } catch (err) {
       setSources(prev =>
