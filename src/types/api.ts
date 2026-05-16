@@ -63,6 +63,11 @@ export interface HybridSearchResponse {
 export interface Bm25Result {
   doc_id: string;
   score: number;
+  source_id: string;
+  url: string;
+  title: string;
+  breadcrumb: string;
+  text: string;
 }
 
 export interface Bm25SearchResponse {
@@ -72,6 +77,11 @@ export interface Bm25SearchResponse {
 export interface VectorResult {
   doc_id: string;
   score: number;
+  source_id: string;
+  url: string;
+  title: string;
+  breadcrumb: string;
+  text: string;
 }
 
 export interface VectorSearchResponse {
@@ -101,6 +111,9 @@ export interface ConfiguredSource {
   seed_urls: string[];
   max_depth: number;
   indexed_chunks: number;
+  last_ingest_at?: string | null;
+  sample_url?: string | null;
+  source_kind?: 'configured' | 'url_manual' | 'upload_file';
 }
 
 export interface PipelineConfig {
@@ -119,4 +132,22 @@ export interface PipelineConfig {
 
 export interface HealthResponse {
   status: 'ok' | 'error';
+}
+
+// ─── Metrics ──────────────────────────────────────────────────────────────────
+
+export interface MetricsResponse {
+  total_chunks: number;
+  faiss_vectors: number;
+  bm25_documents: number;
+  bm25_terms: number;
+}
+
+// ─── Upload ───────────────────────────────────────────────────────────────────
+
+export interface UploadResponse {
+  source_id: string;
+  filename: string;
+  chunks_produced: number;
+  chunks_indexed: number;
 }

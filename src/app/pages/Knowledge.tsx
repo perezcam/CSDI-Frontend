@@ -8,7 +8,6 @@ import {
   Loader2,
   Trash2,
   Plus,
-  AlertCircle,
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -29,6 +28,7 @@ interface UploadItem {
 
 export function Knowledge() {
   const [uploadItems, setUploadItems] = useState<UploadItem[]>([]);
+  const [selectedFiles, setSelectedFiles] = useState<Record<string, File>>({});
   const [urlInput, setUrlInput] = useState('');
   const [isDragging, setIsDragging] = useState(false);
 
@@ -53,56 +53,118 @@ export function Knowledge() {
   };
 
   const addFiles = (files: File[]) => {
-    const newItems: UploadItem[] = files.map(file => ({
-      id: `${Date.now()}-${Math.random()}`,
+    const entries = files.map(file => {
+      const id = `${Date.now()}-${Math.random()}`;
+      return { id, file };
+    });
+
+    const newItems: UploadItem[] = entries.map(({ id, file }) => ({
+      id,
       name: file.name,
       type: 'file',
       size: `${(file.size / 1024 / 1024).toFixed(2)} MB`,
       status: 'pending',
     }));
+
+    setSelectedFiles(prev => {
+      const next = { ...prev };
+      for (const entry of entries) {
+        next[entry.id] = entry.file;
+      }
+      return next;
+    });
+
     setUploadItems(prev => [...prev, ...newItems]);
   };
 
   const handleAddUrl = () => {
-    if (!urlInput.trim()) return;
+    const value = urlInput.trim();
+    if (!value) return;
+
     const newItem: UploadItem = {
       id: Date.now().toString(),
-      name: urlInput,
+      name: value,
       type: 'url',
-      url: urlInput,
-      status: 'pending',
+      url: value,
+      status: 'processing',
     };
-    setUploadItems(prev => [...prev, newItem]);
+
+    setUploadItems(prev => [newItem, ...prev]);
     setUrlInput('');
+
+    void (async () => {
+      try {
+        await sourcesService.ingest({ source_id: value });
+        setUploadItems(prev =>
+          prev.map(i => i.id === newItem.id ? { ...i, status: 'completed' } : i),
+        );
+      } catch (err) {
+        setUploadItems(prev =>
+          prev.map(i =>
+            i.id === newItem.id
+              ? {
+                  ...i,
+                  status: 'error',
+                  errorMessage: err instanceof Error ? err.message : 'Error al ingerir URL',
+                }
+              : i,
+          ),
+        );
+      }
+    })();
   };
 
   const handleRemoveItem = (id: string) => {
     setUploadItems(prev => prev.filter(item => item.id !== id));
+    setSelectedFiles(prev => {
+      const next = { ...prev };
+      delete next[id];
+      return next;
+    });
   };
 
   const handleIngest = async () => {
     const pending = uploadItems.filter(item => item.status === 'pending');
 
-    // Mark all pending items as processing
     setUploadItems(prev =>
       prev.map(item =>
         item.status === 'pending' ? { ...item, status: 'processing' } : item,
       ),
     );
 
-    // Process URL items via the backend ingest endpoint (source_id = URL)
-    // File items would require a future upload endpoint — marked as error for now
     await Promise.all(
       pending.map(async (item) => {
         if (item.type === 'file') {
-          // File upload endpoint not yet available in the backend
-          setUploadItems(prev =>
-            prev.map(i =>
-              i.id === item.id
-                ? { ...i, status: 'error', errorMessage: 'Subida de archivos no disponible aún' }
-                : i,
-            ),
-          );
+          const fileRef = selectedFiles[item.id];
+          if (!fileRef) {
+            setUploadItems(prev =>
+              prev.map(i =>
+                i.id === item.id
+                  ? { ...i, status: 'error', errorMessage: 'No se encontró el archivo seleccionado' }
+                  : i,
+              ),
+            );
+            return;
+          }
+
+          try {
+            await sourcesService.upload(fileRef);
+            setUploadItems(prev =>
+              prev.map(i => i.id === item.id ? { ...i, status: 'completed' } : i),
+            );
+          } catch (err) {
+            setUploadItems(prev =>
+              prev.map(i =>
+                i.id === item.id
+                  ? {
+                      ...i,
+                      status: 'error',
+                      errorMessage: err instanceof Error ? err.message : 'Error al subir/ingerir archivo',
+                    }
+                  : i,
+              ),
+            );
+          }
           return;
         }
 
@@ -130,10 +192,10 @@ export function Knowledge() {
 
   const getStatusIcon = (status: ItemStatus) => {
     switch (status) {
-      case 'pending':    return <FileText className="w-5 h-5 text-slate-400" />;
+      case 'pending': return <FileText className="w-5 h-5 text-slate-400" />;
       case 'processing': return <Loader2 className="w-5 h-5 text-blue-400 animate-spin" />;
-      case 'completed':  return <CheckCircle2 className="w-5 h-5 text-emerald-400" />;
-      case 'error':      return <XCircle className="w-5 h-5 text-red-400" />;
+      case 'completed': return <CheckCircle2 className="w-5 h-5 text-emerald-400" />;
+      case 'error': return <XCircle className="w-5 h-5 text-red-400" />;
     }
   };
 
@@ -160,7 +222,6 @@ export function Knowledge() {
 
   return (
     <div className="h-full overflow-y-auto bg-[#0a0e1a]">
-      {/* Header */}
       <div className="bg-[#0f1419] border-b border-[#1a2332] px-6 py-4">
         <div className="flex items-center justify-between max-w-6xl mx-auto">
           <div>
@@ -180,18 +241,15 @@ export function Knowledge() {
         </div>
       </div>
 
-      {/* Content */}
       <div className="px-6 py-6">
         <div className="max-w-6xl mx-auto space-y-6">
-          {/* File Upload */}
           <div className="bg-[#0f1419] border border-[#1a2332] rounded-lg p-6">
             <h2 className="font-semibold text-white mb-1 flex items-center gap-2">
               <Upload className="w-5 h-5 text-blue-400" />
               Subir Archivos
             </h2>
-            <p className="text-xs text-slate-500 mb-4 flex items-center gap-1">
-              <AlertCircle className="w-3 h-3" />
-              El endpoint de subida de archivos estará disponible en una próxima versión del backend
+            <p className="text-xs text-slate-500 mb-4">
+              Los archivos se suben y se ingieren al backend al presionar "Ingerir Conocimiento"
             </p>
 
             <div
@@ -212,12 +270,12 @@ export function Knowledge() {
               <h3 className="font-semibold text-white mb-2">
                 Arrastra archivos aquí o haz clic para seleccionar
               </h3>
-              <p className="text-sm text-slate-400 mb-4">Soportado: PDF, DOCX, TXT, MD, HTML</p>
+              <p className="text-sm text-slate-400 mb-4">Soportado: PDF, DOCX, TXT, MD</p>
               <label>
                 <input
                   type="file"
                   multiple
-                  accept=".pdf,.docx,.txt,.md,.html"
+                  accept=".pdf,.docx,.txt,.md"
                   onChange={handleFileSelect}
                   className="hidden"
                 />
@@ -235,7 +293,6 @@ export function Knowledge() {
             </div>
           </div>
 
-          {/* URL Section — uses POST /api/v1/ingest { source_id } */}
           <div className="bg-[#0f1419] border border-[#1a2332] rounded-lg p-6">
             <h2 className="font-semibold text-white mb-4 flex items-center gap-2">
               <LinkIcon className="w-5 h-5 text-blue-400" />
@@ -260,11 +317,10 @@ export function Knowledge() {
               </Button>
             </div>
             <p className="text-xs text-slate-600 mt-2">
-              Usa el source_id configurado en el backend (ej: python_docs) o una URL de sitio web
+              Al agregar una URL se ingiere inmediatamente sin modificar tus fuentes raíz configuradas
             </p>
           </div>
 
-          {/* Queue */}
           {uploadItems.length > 0 && (
             <div className="space-y-4">
               {fileItems.length > 0 && (

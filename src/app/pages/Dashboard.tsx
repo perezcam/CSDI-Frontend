@@ -2,15 +2,8 @@ import { Activity, Database, Cpu, Zap, Brain, RefreshCw, AlertCircle, Loader2 } 
 import { Button } from '../components/ui/button';
 import { useDashboard } from '../../hooks/useDashboard';
 
-// Static model info — sourced from backend defaults (no metrics endpoint yet)
-const BACKEND_CONFIG = {
-  embeddingModel: 'sentence-transformers/all-MiniLM-L6-v2',
-  llmModel: 'llama-3.3-70b-versatile (Groq)',
-  rerankerModel: 'cross-encoder/ms-marco-MiniLM-L-6-v2',
-} as const;
-
 export function Dashboard() {
-  const { health, isLoading, error, lastChecked, refresh } = useDashboard();
+  const { health, isLoading, error, lastChecked, refresh, metrics, config } = useDashboard();
 
   const healthColor = {
     healthy: 'text-emerald-400 bg-emerald-500/20 border-emerald-500/30',
@@ -23,6 +16,9 @@ export function Dashboard() {
     warning:  'Rendimiento Degradado',
     error:    'Backend no disponible',
   }[health];
+
+  const modelBadgeClass = "px-3 py-1 rounded-full text-sm font-medium border";
+  const backendProvider = config?.provider ? config.provider.toUpperCase() : '—';
 
   return (
     <div className="h-full overflow-y-auto bg-[#0a0e1a]">
@@ -71,12 +67,6 @@ export function Dashboard() {
                   )}
                 </div>
               </div>
-              {!isLoading && health === 'healthy' && (
-                <div className="flex items-center gap-2">
-                  <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></div>
-                  <span className="text-sm text-emerald-400">En Vivo</span>
-                </div>
-              )}
             </div>
 
             {error && (
@@ -87,21 +77,32 @@ export function Dashboard() {
             )}
           </div>
 
-          {/* Index Metrics — pending a /api/v1/metrics endpoint in the backend */}
+          {/* Live Index Metrics from backend /api/v1/metrics */}
           <div className="bg-[#0f1419] border border-[#1a2332] rounded-lg divide-y divide-[#1a2332]">
             {[
-              { icon: Database, label: 'Total Chunks' },
-              { icon: Zap,      label: 'Vectores en FAISS' },
-              { icon: Cpu,      label: 'Documentos BM25' },
-            ].map(({ icon: Icon, label }) => (
+              { icon: Database, label: 'Total Chunks', value: metrics?.total_chunks },
+              { icon: Zap,      label: 'Vectores en FAISS', value: metrics?.faiss_vectors },
+              { icon: Cpu,      label: 'Documentos BM25', value: metrics?.bm25_documents },
+            ].map(({ icon: Icon, label, value }) => (
               <div key={label} className="px-6 py-4 flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <Icon className="w-4 h-4 text-slate-500" />
                   <span className="text-sm text-slate-400">{label}</span>
                 </div>
-                <span className="text-sm font-medium text-slate-600">— sin endpoint de métricas</span>
+                <span className="text-sm font-medium text-slate-300">
+                  {isLoading ? 'Cargando...' : typeof value === 'number' ? value.toLocaleString('es-ES') : 'No disponible'}
+                </span>
               </div>
             ))}
+            <div className="px-6 py-4 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <Database className="w-4 h-4 text-slate-500" />
+                <span className="text-sm text-slate-400">Términos BM25</span>
+              </div>
+              <span className="text-sm font-medium text-slate-300">
+                {isLoading ? 'Cargando...' : metrics ? metrics.bm25_terms.toLocaleString('es-ES') : 'No disponible'}
+              </span>
+            </div>
           </div>
 
           {/* Active Models */}
@@ -118,8 +119,8 @@ export function Dashboard() {
                   <p className="text-sm font-medium text-white">Modelo de Embeddings</p>
                   <p className="text-xs text-slate-500 mt-1">Codificación vectorial para búsqueda semántica</p>
                 </div>
-                <div className="bg-blue-500/20 text-blue-400 px-3 py-1 rounded-full text-sm font-medium border border-blue-500/30">
-                  {BACKEND_CONFIG.embeddingModel}
+                <div className={`bg-blue-500/20 text-blue-400 border-blue-500/30 ${modelBadgeClass}`}>
+                  sentence-transformers/all-MiniLM-L6-v2
                 </div>
               </div>
 
@@ -128,8 +129,8 @@ export function Dashboard() {
                   <p className="text-sm font-medium text-white">Modelo de Lenguaje</p>
                   <p className="text-xs text-slate-500 mt-1">Generación de respuestas y síntesis</p>
                 </div>
-                <div className="bg-cyan-500/20 text-cyan-400 px-3 py-1 rounded-full text-sm font-medium border border-cyan-500/30">
-                  {BACKEND_CONFIG.llmModel}
+                <div className={`bg-cyan-500/20 text-cyan-400 border-cyan-500/30 ${modelBadgeClass}`}>
+                  {config ? `${config.model} (${backendProvider})` : 'No disponible'}
                 </div>
               </div>
 
@@ -138,8 +139,8 @@ export function Dashboard() {
                   <p className="text-sm font-medium text-white">Modelo Reranker</p>
                   <p className="text-xs text-slate-500 mt-1">Refinamiento de relevancia y ranking</p>
                 </div>
-                <div className="bg-purple-500/20 text-purple-400 px-3 py-1 rounded-full text-sm font-medium border border-purple-500/30">
-                  {BACKEND_CONFIG.rerankerModel}
+                <div className={`bg-purple-500/20 text-purple-400 border-purple-500/30 ${modelBadgeClass}`}>
+                  {config?.reranker_enabled ? 'cross-encoder/ms-marco-MiniLM-L-6-v2 (activo)' : 'Desactivado'}
                 </div>
               </div>
             </div>
@@ -150,9 +151,6 @@ export function Dashboard() {
             <p className="text-xs text-slate-500">
               <span className="text-slate-400 font-medium">Backend RAG Engine</span>
               {' · '}FastAPI · Puerto 8888 · PostgreSQL + pgvector · FAISS HNSW · BM25 + RRF Fusion
-            </p>
-            <p className="text-xs text-slate-600 mt-1">
-              Métricas disponibles al agregar <code className="text-slate-500">/api/v1/metrics</code> al backend
             </p>
           </div>
         </div>

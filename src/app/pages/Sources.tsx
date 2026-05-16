@@ -123,6 +123,7 @@ export function Sources() {
                 <thead className="bg-[#1a2332] border-b border-[#2d3748]">
                   <tr>
                     <th className="text-left px-6 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider">Fuente</th>
+                    <th className="text-left px-6 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider">Tipo</th>
                     <th className="text-left px-6 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider">URL Base</th>
                     <th className="text-left px-6 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider">Estado</th>
                     <th className="text-left px-6 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider">Chunks</th>
@@ -143,15 +144,22 @@ export function Sources() {
                         </div>
                       </td>
                       <td className="px-6 py-4">
-                        <a
-                          href={source.base_url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300"
-                        >
-                          <Globe className="w-3 h-3" />
-                          <span className="truncate max-w-[200px]">{source.base_url}</span>
-                        </a>
+                        {getSourceTypeBadge(source.source_kind)}
+                      </td>
+                      <td className="px-6 py-4">
+                        {source.base_url.startsWith('http://') || source.base_url.startsWith('https://') ? (
+                          <a
+                            href={source.base_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300"
+                          >
+                            <Globe className="w-3 h-3" />
+                            <span className="truncate max-w-[200px]">{source.base_url}</span>
+                          </a>
+                        ) : (
+                          <span className="text-xs text-slate-400">{source.base_url}</span>
+                        )}
                       </td>
                       <td className="px-6 py-4">
                         {getStatusBadge(source.ingestStatus)}
@@ -161,26 +169,32 @@ export function Sources() {
                       </td>
                       <td className="px-6 py-4 text-slate-400 text-sm">
                         {source.lastIngest
-                          ? source.lastIngest.toLocaleDateString('es-ES', {
+                          ? source.lastIngest.toLocaleString('es-ES', {
                               year: 'numeric',
                               month: 'short',
                               day: 'numeric',
+                              hour: '2-digit',
+                              minute: '2-digit',
                             })
                           : '—'}
                       </td>
                       <td className="px-6 py-4 text-right">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => ingest(source.source_id)}
-                          disabled={source.ingestStatus === 'ingesting'}
-                          className="bg-[#1a2332] border-[#2d3748] text-slate-300 hover:bg-[#1f2937] hover:text-white"
-                        >
-                          <RefreshCw
-                            className={`w-4 h-4 mr-2 ${source.ingestStatus === 'ingesting' ? 'animate-spin' : ''}`}
-                          />
-                          Ingerir
-                        </Button>
+                        {source.source_kind === 'upload_file' ? (
+                          <span className="text-xs text-slate-500">N/A</span>
+                        ) : (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => ingest(source.source_id)}
+                            disabled={source.ingestStatus === 'ingesting'}
+                            className="bg-[#1a2332] border-[#2d3748] text-slate-300 hover:bg-[#1f2937] hover:text-white"
+                          >
+                            <RefreshCw
+                              className={`w-4 h-4 mr-2 ${source.ingestStatus === 'ingesting' ? 'animate-spin' : ''}`}
+                            />
+                            Ingerir
+                          </Button>
+                        )}
                       </td>
                     </tr>
                   ))}
@@ -201,3 +215,12 @@ export function Sources() {
     </div>
   );
 }
+  const getSourceTypeBadge = (kind?: string) => {
+    if (kind === 'url_manual') {
+      return <Badge className="bg-cyan-500/20 text-cyan-400 border-cyan-500/30">URL Manual</Badge>;
+    }
+    if (kind === 'upload_file') {
+      return <Badge className="bg-purple-500/20 text-purple-400 border-purple-500/30">Archivo Subido</Badge>;
+    }
+    return <Badge className="bg-slate-500/20 text-slate-300 border-slate-500/30">Configurada</Badge>;
+  };
