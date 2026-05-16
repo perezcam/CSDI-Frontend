@@ -1,8 +1,11 @@
 import { Link, Outlet, useLocation } from 'react-router';
 import { MessageSquare, Search, Database, FolderOpen, LayoutDashboard, Settings, Sparkles } from 'lucide-react';
+import { ChatProvider } from '../context/chat-context';
+import { useChat } from '../../hooks/useChat';
 
 export function Layout() {
   const location = useLocation();
+  const chat = useChat();
 
   const navigation = [
     { name: 'Chat', href: '/', icon: MessageSquare },
@@ -72,7 +75,9 @@ export function Layout() {
 
       {/* Main Content */}
       <main className="flex-1 overflow-auto">
-        <Outlet />
+        <ChatProvider value={chat}>
+          <Outlet />
+        </ChatProvider>
       </main>
     </div>
   );

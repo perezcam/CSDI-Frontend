@@ -37,7 +37,7 @@ export function Sources() {
   );
 
   const totalChunksIndexed = sources.reduce(
-    (acc, s) => acc + (s.lastReport?.chunksIndexed ?? 0),
+    (acc, s) => acc + (s.indexed_chunks ?? 0),
     0,
   );
 
@@ -125,6 +125,7 @@ export function Sources() {
                     <th className="text-left px-6 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider">Fuente</th>
                     <th className="text-left px-6 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider">URL Base</th>
                     <th className="text-left px-6 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider">Estado</th>
+                    <th className="text-left px-6 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider">Chunks</th>
                     <th className="text-left px-6 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider">Última Ingestión</th>
                     <th className="text-right px-6 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider">Acciones</th>
                   </tr>
@@ -154,6 +155,9 @@ export function Sources() {
                       </td>
                       <td className="px-6 py-4">
                         {getStatusBadge(source.ingestStatus)}
+                      </td>
+                      <td className="px-6 py-4 text-slate-300 text-sm">
+                        {source.indexed_chunks.toLocaleString()}
                       </td>
                       <td className="px-6 py-4 text-slate-400 text-sm">
                         {source.lastIngest

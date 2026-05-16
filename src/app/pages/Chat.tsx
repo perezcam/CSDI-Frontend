@@ -1,13 +1,13 @@
 import { useState } from 'react';
 import { Send, Loader2, ExternalLink, AlertCircle } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
-import { useChat } from '../../hooks/useChat';
+import { useChatContext } from '../context/chat-context';
 import { Button } from '../components/ui/button';
 import { Textarea } from '../components/ui/textarea';
 
 export function Chat() {
   const [input, setInput] = useState('');
-  const { messages, isLoading, error, sendMessage } = useChat();
+  const { messages, isLoading, error, sendMessage } = useChatContext();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

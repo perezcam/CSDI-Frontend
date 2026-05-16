@@ -1,9 +1,10 @@
-import { useState } from 'react';
-import { Settings as SettingsIcon, Save, Info, AlertCircle } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { Settings as SettingsIcon, Save, Info, AlertCircle, Loader2 } from 'lucide-react';
 import { Slider } from '../components/ui/slider';
 import { Switch } from '../components/ui/switch';
 import { Button } from '../components/ui/button';
 import { Label } from '../components/ui/label';
+import { Input } from '../components/ui/input';
 import {
   Select,
   SelectContent,
@@ -12,25 +13,55 @@ import {
   SelectValue,
 } from '../components/ui/select';
 import { toast } from 'sonner';
+import { useConfig } from '../../hooks/useConfig';
 
 export function Settings() {
-  // Hybrid weights
+  const { config, isLoading, isSaving, error, saveConfig } = useConfig();
+
   const [bm25Weight, setBm25Weight] = useState([0.3]);
-  const vectorWeight = 1 - bm25Weight[0];
-
-  // LLM Settings
-  const [llmModel, setLlmModel] = useState('gpt-4-turbo');
-  const [temperature, setTemperature] = useState([0.7]);
-
-  // Retrieval Settings
+  const [llmModel, setLlmModel] = useState('llama-3.3-70b-versatile');
+  const [llmBaseUrl, setLlmBaseUrl] = useState('https://api.groq.com/openai/v1');
+  const [llmApiKey, setLlmApiKey] = useState('');
+  const [temperature, setTemperature] = useState([0.1]);
   const [rerankerEnabled, setRerankerEnabled] = useState(true);
   const [contextChunks, setContextChunks] = useState([5]);
   const [candidateK, setCandidateK] = useState([20]);
 
-  const handleSave = () => {
-    // No hay endpoint de configuración en el backend todavía.
-    // Los cambios son locales a esta sesión del navegador.
-    toast.info('Configuración aplicada localmente. Para persistir en el backend, agrega POST /api/v1/config al RAG Engine.');
+  useEffect(() => {
+    if (!config) return;
+    setBm25Weight([config.bm25_weight]);
+    setLlmModel(config.model);
+    setLlmBaseUrl(config.llm_base_url);
+    setLlmApiKey(config.llm_api_key);
+    setTemperature([config.temperature]);
+    setRerankerEnabled(config.reranker_enabled);
+  }, [config]);
+
+  const modelOptions = useMemo(() => {
+    const set = new Set<string>(config?.available_models ?? []);
+    if (llmModel) set.add(llmModel);
+    return Array.from(set);
+  }, [config?.available_models, llmModel]);
+
+  const vectorWeight = 1 - bm25Weight[0];
+
+  const handleSave = async () => {
+    const payload = {
+      bm25_weight: Number(bm25Weight[0].toFixed(2)),
+      vector_weight: Number(vectorWeight.toFixed(2)),
+      temperature: Number(temperature[0].toFixed(2)),
+      model: llmModel,
+      reranker_enabled: rerankerEnabled,
+      llm_base_url: llmBaseUrl.trim(),
+      llm_api_key: llmApiKey.trim(),
+    };
+
+    try {
+      await saveConfig(payload);
+      toast.success('Configuración guardada en el backend');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'No se pudo guardar la configuración');
+    }
   };
 
   const InfoTooltip = ({ text }: { text: string }) => (
@@ -44,98 +75,102 @@ export function Settings() {
 
   return (
     <div className="h-full overflow-y-auto bg-[#0a0e1a]">
-      {/* Header */}
       <div className="bg-[#0f1419] border-b border-[#1a2332] px-6 py-4 sticky top-0 z-10">
         <div className="flex items-center justify-between max-w-4xl mx-auto">
           <div>
             <h1 className="font-semibold text-white">Configuración</h1>
             <p className="text-sm text-slate-400">Ajusta los parámetros del pipeline RAG</p>
           </div>
-          <Button 
-            onClick={handleSave} 
+          <Button
+            onClick={handleSave}
+            disabled={isLoading || isSaving || !config}
             className="bg-gradient-to-br from-[#2563eb] to-[#1e40af] hover:from-[#1d4ed8] hover:to-[#1e3a8a] text-white shadow-lg shadow-blue-900/30"
           >
-            <Save className="w-4 h-4 mr-2" />
+            {isSaving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
             Guardar Cambios
           </Button>
         </div>
       </div>
 
-      {/* Content */}
       <div className="px-6 py-8">
         <div className="max-w-4xl mx-auto space-y-6">
-          {/* No-backend warning */}
-          <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-4 flex items-start gap-3">
-            <AlertCircle className="w-5 h-5 text-yellow-400 flex-shrink-0 mt-0.5" />
-            <p className="text-sm text-yellow-300">
-              Los cambios son <span className="font-semibold">locales a esta sesión</span>. Para que afecten al pipeline RAG necesitas agregar{' '}
-              <code className="bg-yellow-500/20 px-1 rounded text-yellow-200">POST /api/v1/config</code> al backend.
-            </p>
-          </div>
-          {/* Hybrid Search Weights */}
+          {error && (
+            <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-4 flex items-start gap-3">
+              <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
+              <p className="text-sm text-red-300">{error}</p>
+            </div>
+          )}
+
+          {isLoading && (
+            <div className="bg-[#0f1419] border border-[#1a2332] rounded-lg p-6 flex items-center gap-3 text-slate-300">
+              <Loader2 className="w-5 h-5 animate-spin text-blue-400" />
+              Cargando configuración real del backend...
+            </div>
+          )}
+
           <div className="bg-[#0f1419] border border-[#1a2332] rounded-lg p-6">
             <div className="flex items-center gap-2 mb-6">
               <SettingsIcon className="w-5 h-5 text-blue-400" />
               <h2 className="font-semibold text-white">Pesos de Búsqueda Híbrida</h2>
-              <InfoTooltip text="Controla el balance entre búsqueda basada en palabras clave (BM25) y semántica (vectores). La búsqueda híbrida combina ambos enfoques para mejores resultados." />
+              <InfoTooltip text="Controla el balance entre BM25 y búsqueda semántica vectorial." />
             </div>
 
             <div className="space-y-6">
               <div>
                 <div className="flex items-center justify-between mb-3">
                   <Label className="text-sm font-medium text-slate-300">Peso BM25</Label>
-                  <span className="text-sm font-semibold text-blue-400">
-                    {(bm25Weight[0] * 100).toFixed(0)}%
-                  </span>
+                  <span className="text-sm font-semibold text-blue-400">{(bm25Weight[0] * 100).toFixed(0)}%</span>
                 </div>
-                <Slider
-                  value={bm25Weight}
-                  onValueChange={setBm25Weight}
-                  min={0}
-                  max={1}
-                  step={0.05}
-                  className="w-full"
-                />
+                <Slider value={bm25Weight} onValueChange={setBm25Weight} min={0} max={1} step={0.05} className="w-full" />
               </div>
 
               <div>
                 <div className="flex items-center justify-between mb-3">
                   <Label className="text-sm font-medium text-slate-300">Peso Vectorial</Label>
-                  <span className="text-sm font-semibold text-blue-400">
-                    {(vectorWeight * 100).toFixed(0)}%
-                  </span>
+                  <span className="text-sm font-semibold text-blue-400">{(vectorWeight * 100).toFixed(0)}%</span>
                 </div>
                 <div className="h-2 bg-[#1a2332] rounded-full overflow-hidden">
-                  <div 
-                    className="h-full bg-gradient-to-r from-blue-500 to-indigo-500 transition-all"
-                    style={{ width: `${vectorWeight * 100}%` }}
-                  />
+                  <div className="h-full bg-gradient-to-r from-blue-500 to-indigo-500 transition-all" style={{ width: `${vectorWeight * 100}%` }} />
                 </div>
-              </div>
-
-              <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-4">
-                <p className="text-sm text-slate-300">
-                  <span className="font-medium text-blue-400">Modo actual: </span>
-                  {bm25Weight[0] === 0 
-                    ? 'Búsqueda Vectorial Pura' 
-                    : bm25Weight[0] === 1 
-                      ? 'Búsqueda BM25 Pura'
-                      : 'Búsqueda Híbrida'
-                  }
-                </p>
               </div>
             </div>
           </div>
 
-          {/* LLM Configuration */}
           <div className="bg-[#0f1419] border border-[#1a2332] rounded-lg p-6">
             <div className="flex items-center gap-2 mb-6">
               <SettingsIcon className="w-5 h-5 text-blue-400" />
               <h2 className="font-semibold text-white">Modelo de Lenguaje</h2>
-              <InfoTooltip text="Selecciona el LLM para generar respuestas y ajusta la temperatura para controlar creatividad vs consistencia." />
+              <InfoTooltip text="La lista de modelos viene del proveedor activo (Groq/Ollama/OpenAI/custom)." />
             </div>
 
             <div className="space-y-6">
+              <div>
+                <Label className="text-sm font-medium text-slate-300 mb-3 block">Proveedor Detectado</Label>
+                <div className="w-full bg-[#1a2332] border border-[#2d3748] rounded-md px-3 py-2 text-white text-sm">
+                  {config?.provider ?? '—'}
+                </div>
+              </div>
+
+              <div>
+                <Label className="text-sm font-medium text-slate-300 mb-3 block">LLM Base URL</Label>
+                <Input
+                  value={llmBaseUrl}
+                  onChange={(e) => setLlmBaseUrl(e.target.value)}
+                  placeholder="https://api.groq.com/openai/v1"
+                  className="w-full bg-[#1a2332] border-[#2d3748] text-white"
+                />
+              </div>
+
+              <div>
+                <Label className="text-sm font-medium text-slate-300 mb-3 block">LLM API Key</Label>
+                <Input
+                  value={llmApiKey}
+                  onChange={(e) => setLlmApiKey(e.target.value)}
+                  placeholder="gsk_..."
+                  className="w-full bg-[#1a2332] border-[#2d3748] text-white"
+                />
+              </div>
+
               <div>
                 <Label className="text-sm font-medium text-slate-300 mb-3 block">Selección de Modelo</Label>
                 <Select value={llmModel} onValueChange={setLlmModel}>
@@ -143,30 +178,24 @@ export function Settings() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent className="bg-[#0f1419] border-[#2d3748]">
-                    <SelectItem value="gpt-4-turbo">GPT-4 Turbo</SelectItem>
-                    <SelectItem value="gpt-4">GPT-4</SelectItem>
-                    <SelectItem value="gpt-3.5-turbo">GPT-3.5 Turbo</SelectItem>
-                    <SelectItem value="claude-3-opus">Claude 3 Opus</SelectItem>
-                    <SelectItem value="claude-3-sonnet">Claude 3 Sonnet</SelectItem>
+                    {modelOptions.map((model) => (
+                      <SelectItem key={model} value={model}>{model}</SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
+                {modelOptions.length === 0 && (
+                  <p className="text-xs text-slate-500 mt-2">
+                    No hay catálogo para este proveedor. Escribe base URL/API key y guarda.
+                  </p>
+                )}
               </div>
 
               <div>
                 <div className="flex items-center justify-between mb-3">
                   <Label className="text-sm font-medium text-slate-300">Temperatura</Label>
-                  <span className="text-sm font-semibold text-blue-400">
-                    {temperature[0].toFixed(2)}
-                  </span>
+                  <span className="text-sm font-semibold text-blue-400">{temperature[0].toFixed(2)}</span>
                 </div>
-                <Slider
-                  value={temperature}
-                  onValueChange={setTemperature}
-                  min={0}
-                  max={1}
-                  step={0.05}
-                  className="w-full"
-                />
+                <Slider value={temperature} onValueChange={setTemperature} min={0} max={1} step={0.05} className="w-full" />
                 <div className="flex justify-between mt-2">
                   <span className="text-xs text-slate-500">Más Preciso</span>
                   <span className="text-xs text-slate-500">Más Creativo</span>
@@ -175,106 +204,39 @@ export function Settings() {
             </div>
           </div>
 
-          {/* Retrieval Configuration */}
           <div className="bg-[#0f1419] border border-[#1a2332] rounded-lg p-6">
             <div className="flex items-center gap-2 mb-6">
               <SettingsIcon className="w-5 h-5 text-blue-400" />
               <h2 className="font-semibold text-white">Configuración de Retrieval</h2>
-              <InfoTooltip text="Ajusta cómo se recuperan y clasifican los documentos antes de enviarse al LLM." />
+              <InfoTooltip text="Reranker se persiste en backend. contextChunks y candidateK son visuales por ahora." />
             </div>
 
             <div className="space-y-6">
               <div className="flex items-center justify-between p-4 bg-[#1a2332] border border-[#2d3748] rounded-lg">
                 <div>
                   <Label className="text-sm font-medium text-white">Habilitar Reranker</Label>
-                  <p className="text-xs text-slate-500 mt-1">
-                    Usar IA reranker para refinar resultados de búsqueda
-                  </p>
+                  <p className="text-xs text-slate-500 mt-1">Usar modelo de reranking para refinar resultados</p>
                 </div>
-                <Switch
-                  checked={rerankerEnabled}
-                  onCheckedChange={setRerankerEnabled}
-                />
+                <Switch checked={rerankerEnabled} onCheckedChange={setRerankerEnabled} />
               </div>
 
               <div>
                 <div className="flex items-center justify-between mb-3">
                   <Label className="text-sm font-medium text-slate-300">Chunks de Contexto LLM</Label>
-                  <span className="text-sm font-semibold text-blue-400">
-                    {contextChunks[0]} chunks
-                  </span>
+                  <span className="text-sm font-semibold text-blue-400">{contextChunks[0]} chunks</span>
                 </div>
-                <Slider
-                  value={contextChunks}
-                  onValueChange={setContextChunks}
-                  min={1}
-                  max={10}
-                  step={1}
-                  className="w-full"
-                />
-                <p className="text-xs text-slate-500 mt-2">
-                  Número de chunks superiores a incluir en el contexto del LLM
-                </p>
+                <Slider value={contextChunks} onValueChange={setContextChunks} min={1} max={10} step={1} className="w-full" />
               </div>
 
               {rerankerEnabled && (
                 <div>
                   <div className="flex items-center justify-between mb-3">
                     <Label className="text-sm font-medium text-slate-300">Pool de Candidatos Reranker</Label>
-                    <span className="text-sm font-semibold text-blue-400">
-                      {candidateK[0]} candidatos
-                    </span>
+                    <span className="text-sm font-semibold text-blue-400">{candidateK[0]} candidatos</span>
                   </div>
-                  <Slider
-                    value={candidateK}
-                    onValueChange={setCandidateK}
-                    min={5}
-                    max={50}
-                    step={5}
-                    className="w-full"
-                  />
-                  <p className="text-xs text-slate-500 mt-2">
-                    Candidatos iniciales a recuperar antes del reranking
-                  </p>
+                  <Slider value={candidateK} onValueChange={setCandidateK} min={5} max={50} step={5} className="w-full" />
                 </div>
               )}
-            </div>
-          </div>
-
-          {/* Pipeline Summary */}
-          <div className="bg-gradient-to-br from-blue-500/10 to-indigo-500/10 border border-blue-500/20 rounded-lg p-6">
-            <h3 className="font-semibold text-blue-300 mb-4">Pipeline Actual</h3>
-            <div className="space-y-2 text-sm">
-              <div className="flex items-center justify-between">
-                <span className="text-slate-400">Estrategia de Búsqueda:</span>
-                <span className="font-medium text-white">
-                  {bm25Weight[0] === 0 ? 'Solo Vector' : bm25Weight[0] === 1 ? 'Solo BM25' : 'Híbrido'}
-                </span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-slate-400">Retrieval Inicial:</span>
-                <span className="font-medium text-white">
-                  {candidateK[0]} candidatos
-                </span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-slate-400">Reranking:</span>
-                <span className="font-medium text-white">
-                  {rerankerEnabled ? 'Habilitado' : 'Deshabilitado'}
-                </span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-slate-400">Contexto Final:</span>
-                <span className="font-medium text-white">
-                  {contextChunks[0]} chunks a {llmModel}
-                </span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-slate-400">Temperatura:</span>
-                <span className="font-medium text-white">
-                  {temperature[0].toFixed(2)}
-                </span>
-              </div>
             </div>
           </div>
         </div>
