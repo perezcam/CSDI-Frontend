@@ -23,7 +23,15 @@ export function useSources() {
     setIsLoading(true);
     try {
       const data = await sourcesService.list();
-      setSources(data.map(s => ({ ...s, ingestStatus: 'idle' as IngestStatus })));
+      setSources(
+        data.map(s => ({
+          ...s,
+          ingestStatus: s.indexed_chunks > 0 ? ('completed' as IngestStatus) : ('idle' as IngestStatus),
+          lastReport: s.indexed_chunks > 0
+            ? { pagesCrawled: 0, chunksIndexed: s.indexed_chunks }
+            : undefined,
+        })),
+      );
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error al cargar las fuentes');
     } finally {
@@ -50,6 +58,7 @@ export function useSources() {
                 ...s,
                 ingestStatus: 'completed' as IngestStatus,
                 lastIngest: new Date(),
+                indexed_chunks: report.chunks_indexed,
                 lastReport: {
                   pagesCrawled: report.pages_crawled,
                   chunksIndexed: report.chunks_indexed,
