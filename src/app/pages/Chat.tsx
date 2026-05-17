@@ -1,15 +1,15 @@
 import { useState } from 'react';
-import { Send, Loader2, ExternalLink, AlertCircle } from 'lucide-react';
+import { Send, Loader2, ExternalLink, AlertCircle, Trash2 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
-import { useChat } from '../../hooks/useChat';
+import { useChatContext } from '../../context/ChatContext';
 import { Button } from '../components/ui/button';
 import { Textarea } from '../components/ui/textarea';
 
 export function Chat() {
   const [input, setInput] = useState('');
-  const { messages, isLoading, error, sendMessage } = useChat();
+  const { messages, isLoading, error, sendMessage, clearMessages } = useChatContext();
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     await sendMessage(input);
     setInput('');
@@ -24,11 +24,23 @@ export function Chat() {
       {/* Chat Area */}
       <div className="flex-1 flex flex-col">
         {/* Header */}
-        <div className="h-16 border-b border-[#1a2332] bg-[#0f1419] px-6 flex items-center">
+        <div className="h-16 border-b border-[#1a2332] bg-[#0f1419] px-6 flex items-center justify-between">
           <div>
             <h1 className="font-semibold text-white">Chat CSDI</h1>
             <p className="text-sm text-slate-400">Consulta tu base de conocimiento indexada</p>
           </div>
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            onClick={clearMessages}
+            disabled={isLoading || messages.length === 0}
+            className="bg-[#1a2332] border-[#2d3748] text-slate-300 hover:bg-[#1f2937] hover:text-red-300"
+            title="Borrar chat"
+            aria-label="Borrar chat"
+          >
+            <Trash2 className="w-4 h-4" />
+          </Button>
         </div>
 
         {/* Messages */}
@@ -91,10 +103,11 @@ export function Chat() {
                 onChange={(e) => setInput(e.target.value)}
                 placeholder="Escribe tu pregunta sobre la base de conocimiento..."
                 className="flex-1 min-h-[60px] resize-none bg-[#1a2332] border-[#2d3748] text-white placeholder:text-slate-500"
-                onKeyDown={(e) => {
+                onKeyDown={async (e) => {
                   if (e.key === 'Enter' && !e.shiftKey) {
                     e.preventDefault();
-                    handleSubmit(e);
+                    await sendMessage(input);
+                    setInput('');
                   }
                 }}
               />
