@@ -16,9 +16,10 @@ export function Search() {
 
   const getSearchModeColor = (mode: SearchMode) => {
     switch (mode) {
-      case 'bm25':    return 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30';
-      case 'vector':  return 'bg-purple-500/20 text-purple-400 border-purple-500/30';
-      case 'hybrid':  return 'bg-blue-500/20 text-blue-400 border-blue-500/30';
+      case 'bm25':      return 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30';
+      case 'vector':    return 'bg-purple-500/20 text-purple-400 border-purple-500/30';
+      case 'hybrid':    return 'bg-blue-500/20 text-blue-400 border-blue-500/30';
+      case 'web_cache': return 'bg-amber-500/20 text-amber-400 border-amber-500/30';
     }
   };
 
@@ -57,20 +58,20 @@ export function Search() {
               <label className="text-sm font-medium text-slate-300 mb-3 block">
                 Método de Recuperación
               </label>
-              <div className="flex gap-2">
-                {(['bm25', 'vector', 'hybrid'] as const).map((mode) => (
+              <div className="grid grid-cols-2 gap-2">
+                {(['bm25', 'vector', 'hybrid', 'web_cache'] as const).map((mode) => (
                   <button
                     key={mode}
                     onClick={() => setSearchMode(mode)}
                     className={`
-                      flex-1 px-4 py-2 rounded-lg border text-sm font-medium transition-all
+                      px-4 py-2 rounded-lg border text-sm font-medium transition-all
                       ${searchMode === mode
                         ? getSearchModeColor(mode)
                         : 'bg-[#1a2332] border-[#2d3748] text-slate-400 hover:bg-[#1f2937] hover:text-slate-300'
                       }
                     `}
                   >
-                    {mode === 'bm25' ? 'Solo BM25' : mode === 'vector' ? 'Solo Vector' : 'Híbrido'}
+                    {mode === 'bm25' ? 'Solo BM25' : mode === 'vector' ? 'Solo Vector' : mode === 'hybrid' ? 'Solo Híbrido' : 'Solo Web Caché'}
                   </button>
                 ))}
               </div>

@@ -4,6 +4,7 @@ import type {
   HybridSearchResponse,
   Bm25SearchResponse,
   VectorSearchResponse,
+  WebCacheSearchResponse,
 } from '../types/api';
 
 export const searchService = {
@@ -18,4 +19,8 @@ export const searchService = {
   /** Dense vector (FAISS) search — returns doc_id + score only */
   vector: (body: SearchRequest) =>
     api.post<VectorSearchResponse>('/api/v1/vector/search', body),
+
+  /** Hybrid search restricted to the web-cache index (results from previous web searches) */
+  webCache: (body: SearchRequest) =>
+    api.post<WebCacheSearchResponse>('/api/v1/search/web-cache', body),
 };

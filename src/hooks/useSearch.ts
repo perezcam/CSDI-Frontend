@@ -1,7 +1,7 @@
 import { useState, useCallback } from 'react';
 import { searchService } from '../services/search.service';
 
-export type SearchMode = 'bm25' | 'vector' | 'hybrid';
+export type SearchMode = 'bm25' | 'vector' | 'hybrid' | 'web_cache';
 
 export interface SearchResultItem {
   id: string;
@@ -52,6 +52,20 @@ export function useSearch() {
             score: r.score,
             sourceId: '',
             breadcrumb: '',
+            rank: i + 1,
+          })),
+        );
+      } else if (mode === 'web_cache') {
+        const response = await searchService.webCache({ query, top_k: topK });
+        setResults(
+          response.results.map((r, i) => ({
+            id: r.chunk_id,
+            title: r.title,
+            url: r.url,
+            text: r.text,
+            score: r.score,
+            sourceId: r.source_id,
+            breadcrumb: r.breadcrumb,
             rank: i + 1,
           })),
         );
