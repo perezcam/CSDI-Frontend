@@ -90,6 +90,7 @@ export interface ConfiguredSource {
   technology: string[];
   seed_urls: string[];
   max_depth: number;
+  indexed_chunks: number;
 }
 
 // ─── Pipeline Config ─────────────────────────────────────────────────────────
@@ -134,4 +135,13 @@ export type PipelineConfigUpdate = Omit<PipelineConfig, 'provider' | 'available_
 
 export interface HealthResponse {
   status: 'ok' | 'error';
+}
+
+// ─── Metrics ─────────────────────────────────────────────────────────────────
+
+export interface MetricsResponse {
+  total_chunks: number;
+  faiss_vectors: number;
+  bm25_documents: number;
+  bm25_terms: number;
 }

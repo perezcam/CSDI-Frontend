@@ -2,7 +2,6 @@ import { Activity, Database, Cpu, Zap, Brain, RefreshCw, AlertCircle, Loader2 } 
 import { Button } from '../components/ui/button';
 import { useDashboard } from '../../hooks/useDashboard';
 
-// Static model info — sourced from backend defaults (no metrics endpoint yet)
 const BACKEND_CONFIG = {
   embeddingModel: 'sentence-transformers/all-MiniLM-L6-v2',
   llmModel: 'llama-3.3-70b-versatile (Groq)',
@@ -10,7 +9,7 @@ const BACKEND_CONFIG = {
 } as const;
 
 export function Dashboard() {
-  const { health, isLoading, error, lastChecked, refresh } = useDashboard();
+  const { health, metrics, isLoading, error, lastChecked, refresh } = useDashboard();
 
   const healthColor = {
     healthy: 'text-emerald-400 bg-emerald-500/20 border-emerald-500/30',
@@ -87,19 +86,23 @@ export function Dashboard() {
             )}
           </div>
 
-          {/* Index Metrics — pending a /api/v1/metrics endpoint in the backend */}
+          {/* Index Metrics */}
           <div className="bg-[#0f1419] border border-[#1a2332] rounded-lg divide-y divide-[#1a2332]">
             {[
-              { icon: Database, label: 'Total Chunks' },
-              { icon: Zap,      label: 'Vectores en FAISS' },
-              { icon: Cpu,      label: 'Documentos BM25' },
-            ].map(({ icon: Icon, label }) => (
+              { icon: Database, label: 'Total Chunks',      value: metrics?.total_chunks },
+              { icon: Zap,      label: 'Vectores en FAISS', value: metrics?.faiss_vectors },
+              { icon: Cpu,      label: 'Documentos BM25',   value: metrics?.bm25_documents },
+            ].map(({ icon: Icon, label, value }) => (
               <div key={label} className="px-6 py-4 flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <Icon className="w-4 h-4 text-slate-500" />
                   <span className="text-sm text-slate-400">{label}</span>
                 </div>
-                <span className="text-sm font-medium text-slate-600">— sin endpoint de métricas</span>
+                <span className="text-sm font-semibold text-white">
+                  {isLoading
+                    ? <Loader2 className="w-4 h-4 animate-spin text-slate-500" />
+                    : value != null ? value.toLocaleString() : '—'}
+                </span>
               </div>
             ))}
           </div>
@@ -150,9 +153,6 @@ export function Dashboard() {
             <p className="text-xs text-slate-500">
               <span className="text-slate-400 font-medium">Backend RAG Engine</span>
               {' · '}FastAPI · Puerto 8888 · PostgreSQL + pgvector · FAISS HNSW · BM25 + RRF Fusion
-            </p>
-            <p className="text-xs text-slate-600 mt-1">
-              Métricas disponibles al agregar <code className="text-slate-500">/api/v1/metrics</code> al backend
             </p>
           </div>
         </div>
