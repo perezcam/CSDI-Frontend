@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import {
   AlertCircle,
@@ -57,6 +57,7 @@ export function Search() {
   const [selectedSourceIds, setSelectedSourceIds] = useState<string[]>([]);
   const { results, runs, isSearching, error, search, compareAll } = useSearch();
   const evaluation = useEvaluation();
+  const hasSyncedInitialQuery = useRef(false);
 
   useEffect(() => {
     void evaluation.loadQueries();
@@ -69,6 +70,12 @@ export function Search() {
     () => evaluation.queries.find(item => item.id === evaluation.selectedQueryId) ?? null,
     [evaluation.queries, evaluation.selectedQueryId],
   );
+
+  useEffect(() => {
+    if (!selectedQuery || hasSyncedInitialQuery.current) return;
+    syncQueryScope(selectedQuery, setQuery, setSourceScope, setSelectedSourceIds);
+    hasSyncedInitialQuery.current = true;
+  }, [selectedQuery]);
 
   const selectedStrategies = useMemo<RetrievalStrategy[]>(
     () => (searchMode === 'compare' ? STRATEGIES : [searchMode]),
@@ -106,14 +113,8 @@ export function Search() {
   const handleSelectQuery = async (queryId: string) => {
     const selected = evaluation.queries.find(item => item.id === queryId);
     if (selected) {
-      setQuery(selected.query);
-      if (selected.source_ids && selected.source_ids.length > 0) {
-        setSourceScope('selected');
-        setSelectedSourceIds(selected.source_ids);
-      } else {
-        setSourceScope('all');
-        setSelectedSourceIds([]);
-      }
+      syncQueryScope(selected, setQuery, setSourceScope, setSelectedSourceIds);
+      hasSyncedInitialQuery.current = true;
     }
     try {
       await evaluation.selectQuery(queryId);
@@ -983,6 +984,22 @@ function getSearchModeColor(mode: ExplorerMode) {
 
 function formatSourceScope(sourceIds?: string[] | null) {
   return sourceIds && sourceIds.length > 0 ? sourceIds.join(', ') : 'Todas las fuentes';
+}
+
+function syncQueryScope(
+  selectedQuery: { query: string; source_ids?: string[] | null },
+  setQuery: (query: string) => void,
+  setSourceScope: (scope: SourceScope) => void,
+  setSelectedSourceIds: (sourceIds: string[]) => void,
+) {
+  setQuery(selectedQuery.query);
+  if (selectedQuery.source_ids && selectedQuery.source_ids.length > 0) {
+    setSourceScope('selected');
+    setSelectedSourceIds(selectedQuery.source_ids);
+    return;
+  }
+  setSourceScope('all');
+  setSelectedSourceIds([]);
 }
 
 function formatMetric(value: number | undefined) {

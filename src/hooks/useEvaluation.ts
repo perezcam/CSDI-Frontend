@@ -33,13 +33,26 @@ export function useEvaluation() {
     throw err;
   };
 
+  const loadQueryData = useCallback(async (queryId: string) => {
+    const [rankings, judgmentData] = await Promise.all([
+      evaluationService.getRankings(queryId).catch(() => null),
+      evaluationService.getJudgments(queryId),
+    ]);
+    setEvaluationRankings(rankings);
+    setJudgments(judgmentData.judgments);
+  }, []);
+
   const loadQueries = useCallback(async () => {
     setIsLoading(true);
     setError(null);
     try {
       const data = await evaluationService.listQueries();
       setQueries(data);
-      setSelectedQueryId(prev => prev ?? data[0]?.id ?? null);
+      const queryId = selectedQueryId ?? data[0]?.id ?? null;
+      setSelectedQueryId(queryId);
+      if (queryId) {
+        await loadQueryData(queryId);
+      }
       return data;
     } catch (err) {
       captureError(err, 'No se pudieron cargar las consultas de evaluación');
@@ -47,7 +60,7 @@ export function useEvaluation() {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [loadQueryData, selectedQueryId]);
 
   const loadSummary = useCallback(async () => {
     try {
@@ -91,16 +104,11 @@ export function useEvaluation() {
     setSelectedQueryId(queryId);
     setError(null);
     try {
-      const [rankings, judgmentData] = await Promise.all([
-        evaluationService.getRankings(queryId).catch(() => null),
-        evaluationService.getJudgments(queryId),
-      ]);
-      setEvaluationRankings(rankings);
-      setJudgments(judgmentData.judgments);
+      await loadQueryData(queryId);
     } catch (err) {
       captureError(err, 'No se pudo cargar la consulta de evaluación');
     }
-  }, []);
+  }, [loadQueryData]);
 
   const createQuery = useCallback(async (body: EvaluationQueryCreateRequest) => {
     setIsLoading(true);
