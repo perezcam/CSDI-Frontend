@@ -52,6 +52,7 @@ export function Search() {
   const [query, setQuery] = useState('');
   const [pageMode, setPageMode] = useState<PageMode>('explore');
   const [searchMode, setSearchMode] = useState<ExplorerMode>('hybrid');
+  const [evaluationStrategies, setEvaluationStrategies] = useState<RetrievalStrategy[]>(STRATEGIES);
   const [topK, setTopK] = useState([10]);
   const [sourceScope, setSourceScope] = useState<SourceScope>('all');
   const [selectedSourceIds, setSelectedSourceIds] = useState<string[]>([]);
@@ -76,11 +77,6 @@ export function Search() {
     syncQueryScope(selectedQuery, setQuery, setSourceScope, setSelectedSourceIds);
     hasSyncedInitialQuery.current = true;
   }, [selectedQuery]);
-
-  const selectedStrategies = useMemo<RetrievalStrategy[]>(
-    () => (searchMode === 'compare' ? STRATEGIES : [searchMode]),
-    [searchMode],
-  );
 
   const compareRows = useCompareRows(runs, topK[0]);
   const latestReport = evaluation.report;
@@ -125,10 +121,14 @@ export function Search() {
 
   const handleRunEvaluationRankings = async () => {
     if (!evaluation.selectedQueryId) return;
+    if (evaluationStrategies.length === 0) {
+      toast.error('Seleccione al menos un método de evaluación.');
+      return;
+    }
     try {
       await evaluation.runRankings(evaluation.selectedQueryId, {
         top_k: topK[0],
-        strategies: selectedStrategies,
+        strategies: evaluationStrategies,
       });
       toast.success('Rankings de evaluación actualizados');
     } catch {
@@ -196,8 +196,11 @@ export function Search() {
           </div>
 
           <ControlsPanel
+            pageMode={pageMode}
             searchMode={searchMode}
             setSearchMode={setSearchMode}
+            evaluationStrategies={evaluationStrategies}
+            setEvaluationStrategies={setEvaluationStrategies}
             topK={topK}
             setTopK={setTopK}
           />
@@ -219,7 +222,7 @@ export function Search() {
             <EvaluationPanel
               evaluation={evaluation}
               selectedQuery={selectedQuery}
-              selectedStrategies={selectedStrategies}
+              selectedStrategies={evaluationStrategies}
               topK={topK[0]}
               bestNdcgStrategy={bestNdcgStrategy}
               onSelectQuery={handleSelectQuery}
@@ -262,37 +265,75 @@ function ModeTabs({ pageMode, onChange }: { pageMode: PageMode; onChange: (mode:
 }
 
 function ControlsPanel({
+  pageMode,
   searchMode,
   setSearchMode,
+  evaluationStrategies,
+  setEvaluationStrategies,
   topK,
   setTopK,
 }: {
+  pageMode: PageMode;
   searchMode: ExplorerMode;
   setSearchMode: (mode: ExplorerMode) => void;
+  evaluationStrategies: RetrievalStrategy[];
+  setEvaluationStrategies: (strategies: RetrievalStrategy[]) => void;
   topK: number[];
   setTopK: (value: number[]) => void;
 }) {
+  const toggleEvaluationStrategy = (strategy: RetrievalStrategy) => {
+    setEvaluationStrategies(
+      evaluationStrategies.includes(strategy)
+        ? evaluationStrategies.filter(item => item !== strategy)
+        : [...evaluationStrategies, strategy],
+    );
+  };
+
   return (
     <div className="grid grid-cols-2 gap-6">
       <div>
         <label className="text-sm font-medium text-slate-300 mb-3 block">
-          Método de Retrieval
+          {pageMode === 'explore' ? 'Método de Retrieval' : 'Métodos a evaluar'}
         </label>
-        <div className="grid grid-cols-2 gap-2">
-          {(['bm25', 'vector', 'hybrid', 'compare'] as const).map((mode) => (
-            <button
-              key={mode}
-              onClick={() => setSearchMode(mode)}
-              className={`px-4 py-2 rounded-lg border text-sm font-medium transition-all ${
-                searchMode === mode
-                  ? getSearchModeColor(mode)
-                  : 'bg-[#1a2332] border-[#2d3748] text-slate-400 hover:bg-[#1f2937] hover:text-slate-300'
-              }`}
-            >
-              {mode === 'bm25' ? 'Solo BM25' : mode === 'vector' ? 'Solo Vector' : mode === 'hybrid' ? 'Solo Híbrido' : 'Comparar (3 métodos)'}
-            </button>
-          ))}
-        </div>
+        {pageMode === 'explore' ? (
+          <div className="grid grid-cols-2 gap-2">
+            {(['bm25', 'vector', 'hybrid', 'compare'] as const).map((mode) => (
+              <button
+                key={mode}
+                onClick={() => setSearchMode(mode)}
+                className={`px-4 py-2 rounded-lg border text-sm font-medium transition-all ${
+                  searchMode === mode
+                    ? getSearchModeColor(mode)
+                    : 'bg-[#1a2332] border-[#2d3748] text-slate-400 hover:bg-[#1f2937] hover:text-slate-300'
+                }`}
+              >
+                {mode === 'bm25' ? 'Solo BM25' : mode === 'vector' ? 'Solo Vector' : mode === 'hybrid' ? 'Solo Híbrido' : 'Comparar (3 métodos)'}
+              </button>
+            ))}
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <div className="grid grid-cols-3 gap-2">
+              {STRATEGIES.map((strategy) => (
+                <button
+                  key={strategy}
+                  type="button"
+                  onClick={() => toggleEvaluationStrategy(strategy)}
+                  className={`px-4 py-2 rounded-lg border text-sm font-medium transition-all ${
+                    evaluationStrategies.includes(strategy)
+                      ? getSearchModeColor(strategy)
+                      : 'bg-[#1a2332] border-[#2d3748] text-slate-400 hover:bg-[#1f2937] hover:text-slate-300'
+                  }`}
+                >
+                  {strategy === 'bm25' ? 'BM25' : strategy === 'vector' ? 'Vector' : 'Híbrido'}
+                </button>
+              ))}
+            </div>
+            <p className="text-xs text-slate-500">
+              Seleccione los métodos que desea evaluar. Para comparar el sistema completo, mantenga BM25, Vector e Híbrido seleccionados.
+            </p>
+          </div>
+        )}
       </div>
 
       <div>
