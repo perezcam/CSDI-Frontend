@@ -1,6 +1,8 @@
 import { useCallback, useState } from 'react';
 import { evaluationService } from '../services/evaluation.service';
+import { sourcesService } from '../services/sources.service';
 import type {
+  ConfiguredSource,
   EvaluationJudgmentUpdateRequest,
   EvaluationQuery,
   EvaluationQueryCreateRequest,
@@ -17,10 +19,13 @@ export function useEvaluation() {
   const [judgments, setJudgments] = useState<Record<string, number>>({});
   const [report, setReport] = useState<EvaluationReport | null>(null);
   const [summary, setSummary] = useState<EvaluationSummary | null>(null);
+  const [sources, setSources] = useState<ConfiguredSource[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [isLoadingSources, setIsLoadingSources] = useState(false);
   const [isRunningRankings, setIsRunningRankings] = useState(false);
   const [isRunningEvaluation, setIsRunningEvaluation] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [sourcesError, setSourcesError] = useState<string | null>(null);
 
   const captureError = (err: unknown, fallback: string) => {
     const message = err instanceof Error ? err.message : fallback;
@@ -62,6 +67,23 @@ export function useEvaluation() {
     } catch {
       setReport(null);
       return null;
+    }
+  }, []);
+
+  const loadSources = useCallback(async () => {
+    setIsLoadingSources(true);
+    setSourcesError(null);
+    try {
+      const data = await sourcesService.list();
+      setSources(data);
+      return data;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'No se pudieron cargar las fuentes';
+      setSourcesError(message);
+      setSources([]);
+      return [];
+    } finally {
+      setIsLoadingSources(false);
     }
   }, []);
 
@@ -173,11 +195,15 @@ export function useEvaluation() {
     judgments,
     report,
     summary,
+    sources,
     isLoading,
+    isLoadingSources,
     isRunningRankings,
     isRunningEvaluation,
     error,
+    sourcesError,
     loadQueries,
+    loadSources,
     createQuery,
     selectQuery,
     runRankings,

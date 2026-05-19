@@ -24,12 +24,14 @@ import type {
   EvaluationRankingResult,
   EvaluationRankingsResponse,
   EvaluationReport,
+  ConfiguredSource,
   RetrievalStrategy,
   StrategyMetrics,
 } from '../../types/api';
 
 type ExplorerMode = SearchMode | 'compare';
 type PageMode = 'explore' | 'evaluate';
+type SourceScope = 'all' | 'selected';
 
 const STRATEGIES: RetrievalStrategy[] = ['bm25', 'vector', 'hybrid'];
 const RELEVANCE_LABELS = {
@@ -51,6 +53,8 @@ export function Search() {
   const [pageMode, setPageMode] = useState<PageMode>('explore');
   const [searchMode, setSearchMode] = useState<ExplorerMode>('hybrid');
   const [topK, setTopK] = useState([10]);
+  const [sourceScope, setSourceScope] = useState<SourceScope>('all');
+  const [selectedSourceIds, setSelectedSourceIds] = useState<string[]>([]);
   const { results, runs, isSearching, error, search, compareAll } = useSearch();
   const evaluation = useEvaluation();
 
@@ -58,6 +62,7 @@ export function Search() {
     void evaluation.loadQueries();
     void evaluation.loadSummary();
     void evaluation.loadReport();
+    void evaluation.loadSources();
   }, []);
 
   const selectedQuery = useMemo(
@@ -83,8 +88,15 @@ export function Search() {
 
   const handleSaveCurrentQuery = async () => {
     if (!query.trim()) return;
+    if (sourceScope === 'selected' && selectedSourceIds.length === 0) {
+      toast.error('Seleccione al menos una fuente o use Todas las fuentes.');
+      return;
+    }
     try {
-      const created = await evaluation.createQuery({ query: query.trim() });
+      const created = await evaluation.createQuery({
+        query: query.trim(),
+        source_ids: sourceScope === 'all' ? null : selectedSourceIds,
+      });
       if (created) toast.success('Consulta guardada para evaluación');
     } catch {
       toast.error('No se pudo guardar la consulta');
@@ -93,7 +105,16 @@ export function Search() {
 
   const handleSelectQuery = async (queryId: string) => {
     const selected = evaluation.queries.find(item => item.id === queryId);
-    if (selected) setQuery(selected.query);
+    if (selected) {
+      setQuery(selected.query);
+      if (selected.source_ids && selected.source_ids.length > 0) {
+        setSourceScope('selected');
+        setSelectedSourceIds(selected.source_ids);
+      } else {
+        setSourceScope('all');
+        setSelectedSourceIds([]);
+      }
+    }
     try {
       await evaluation.selectQuery(queryId);
     } catch {
@@ -201,6 +222,10 @@ export function Search() {
               topK={topK[0]}
               bestNdcgStrategy={bestNdcgStrategy}
               onSelectQuery={handleSelectQuery}
+              sourceScope={sourceScope}
+              selectedSourceIds={selectedSourceIds}
+              onSourceScopeChange={setSourceScope}
+              onSelectedSourceIdsChange={setSelectedSourceIds}
               onRunRankings={handleRunEvaluationRankings}
               onUpdateJudgment={handleUpdateJudgment}
               onRunEvaluation={handleRunEvaluation}
@@ -336,6 +361,10 @@ function EvaluationPanel({
   topK,
   bestNdcgStrategy,
   onSelectQuery,
+  sourceScope,
+  selectedSourceIds,
+  onSourceScopeChange,
+  onSelectedSourceIdsChange,
   onRunRankings,
   onUpdateJudgment,
   onRunEvaluation,
@@ -346,6 +375,10 @@ function EvaluationPanel({
   topK: number;
   bestNdcgStrategy: RetrievalStrategy | null;
   onSelectQuery: (queryId: string) => void;
+  sourceScope: SourceScope;
+  selectedSourceIds: string[];
+  onSourceScopeChange: (scope: SourceScope) => void;
+  onSelectedSourceIdsChange: (sourceIds: string[]) => void;
   onRunRankings: () => void;
   onUpdateJudgment: (chunkId: string, relevance: 0 | 1 | 2 | 3) => void;
   onRunEvaluation: () => void;
@@ -361,10 +394,19 @@ function EvaluationPanel({
             <ListChecks className="w-4 h-4 text-blue-400" />
             <h2 className="font-semibold text-white">Dataset de evaluación</h2>
           </div>
+          <SourceScopeSelector
+            sources={evaluation.sources}
+            sourcesError={evaluation.sourcesError}
+            isLoadingSources={evaluation.isLoadingSources}
+            sourceScope={sourceScope}
+            selectedSourceIds={selectedSourceIds}
+            onSourceScopeChange={onSourceScopeChange}
+            onSelectedSourceIdsChange={onSelectedSourceIdsChange}
+          />
           {evaluation.queries.length === 0 ? (
-            <p className="text-sm text-slate-400">No hay consultas persistidas todavía.</p>
+            <p className="text-sm text-slate-400 mt-5">No hay consultas persistidas todavía.</p>
           ) : (
-            <div className="space-y-2">
+            <div className="space-y-2 mt-5">
               {evaluation.queries.map((item) => (
                 <button
                   key={item.id}
@@ -377,7 +419,7 @@ function EvaluationPanel({
                 >
                   <div className="flex items-center justify-between gap-2">
                     <span className="text-xs font-mono text-cyan-400">{item.id}</span>
-                    {item.source_ids?.[0] && <span className="text-xs text-slate-500">{item.source_ids[0]}</span>}
+                    <span className="text-xs text-slate-500">{formatSourceScope(item.source_ids)}</span>
                   </div>
                   <p className="text-sm text-slate-200 mt-1 line-clamp-2">{item.query}</p>
                 </button>
@@ -394,6 +436,11 @@ function EvaluationPanel({
                 <p className="text-sm text-slate-400 mt-1">
                   {selectedQuery ? selectedQuery.query : 'Selecciona o guarda una consulta para empezar.'}
                 </p>
+                {selectedQuery && (
+                  <p className="text-xs text-slate-500 mt-2">
+                    Alcance: {formatSourceScope(selectedQuery.source_ids)}
+                  </p>
+                )}
               </div>
               <Button
                 onClick={onRunRankings}
@@ -406,6 +453,9 @@ function EvaluationPanel({
             </div>
             <div className="flex items-center gap-2 mt-4">
               <span className="text-xs text-slate-500">Top K {topK}</span>
+              {selectedQuery && (
+                <span className="text-xs text-slate-500">· {formatSourceScope(selectedQuery.source_ids)}</span>
+              )}
               {selectedStrategies.map(strategy => (
                 <Badge key={strategy} className={getSearchModeColor(strategy)}>{strategy}</Badge>
               ))}
@@ -426,6 +476,103 @@ function EvaluationPanel({
           />
         </div>
       </div>
+    </div>
+  );
+}
+
+function SourceScopeSelector({
+  sources,
+  sourcesError,
+  isLoadingSources,
+  sourceScope,
+  selectedSourceIds,
+  onSourceScopeChange,
+  onSelectedSourceIdsChange,
+}: {
+  sources: ConfiguredSource[];
+  sourcesError: string | null;
+  isLoadingSources: boolean;
+  sourceScope: SourceScope;
+  selectedSourceIds: string[];
+  onSourceScopeChange: (scope: SourceScope) => void;
+  onSelectedSourceIdsChange: (sourceIds: string[]) => void;
+}) {
+  const toggleSource = (sourceId: string) => {
+    onSelectedSourceIdsChange(
+      selectedSourceIds.includes(sourceId)
+        ? selectedSourceIds.filter(item => item !== sourceId)
+        : [...selectedSourceIds, sourceId],
+    );
+  };
+
+  return (
+    <div className="border-b border-[#1a2332] pb-5">
+      <label className="text-sm font-medium text-slate-300 mb-3 block">
+        Alcance del dataset
+      </label>
+      <div className="grid grid-cols-2 gap-2">
+        <button
+          type="button"
+          onClick={() => {
+            onSourceScopeChange('all');
+            onSelectedSourceIdsChange([]);
+          }}
+          className={`px-3 py-2 rounded-lg border text-sm transition-all ${
+            sourceScope === 'all'
+              ? 'bg-blue-500/20 text-blue-300 border-blue-500/40'
+              : 'bg-[#121a28] border-[#2d3748] text-slate-400 hover:text-slate-200'
+          }`}
+        >
+          Todas las fuentes
+        </button>
+        <button
+          type="button"
+          onClick={() => onSourceScopeChange('selected')}
+          className={`px-3 py-2 rounded-lg border text-sm transition-all ${
+            sourceScope === 'selected'
+              ? 'bg-blue-500/20 text-blue-300 border-blue-500/40'
+              : 'bg-[#121a28] border-[#2d3748] text-slate-400 hover:text-slate-200'
+          }`}
+        >
+          Fuentes seleccionadas
+        </button>
+      </div>
+
+      {sourcesError && (
+        <p className="mt-3 text-xs text-amber-300">
+          No se pudieron cargar las fuentes. Puede evaluar contra todas las fuentes.
+        </p>
+      )}
+
+      {sourceScope === 'selected' && (
+        <div className="mt-3 max-h-56 overflow-y-auto space-y-2 pr-1">
+          {isLoadingSources ? (
+            <p className="text-xs text-slate-500">Cargando fuentes...</p>
+          ) : sources.length === 0 ? (
+            <p className="text-xs text-slate-500">No hay fuentes disponibles.</p>
+          ) : (
+            sources.map(source => (
+              <label
+                key={source.source_id}
+                className="flex items-start gap-3 rounded-lg border border-[#1a2332] bg-[#121a28] px-3 py-2 cursor-pointer hover:border-[#2d3748]"
+              >
+                <input
+                  type="checkbox"
+                  checked={selectedSourceIds.includes(source.source_id)}
+                  onChange={() => toggleSource(source.source_id)}
+                  className="mt-1 accent-blue-500"
+                />
+                <span className="min-w-0">
+                  <span className="block text-sm text-slate-200">{source.name}</span>
+                  <span className="block text-xs text-slate-500">
+                    {source.source_id} — {source.indexed_chunks ?? 0} chunks
+                  </span>
+                </span>
+              </label>
+            ))
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -832,6 +979,10 @@ function getSearchModeColor(mode: ExplorerMode) {
     case 'hybrid': return 'bg-blue-500/20 text-blue-400 border-blue-500/30';
     case 'compare': return 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30';
   }
+}
+
+function formatSourceScope(sourceIds?: string[] | null) {
+  return sourceIds && sourceIds.length > 0 ? sourceIds.join(', ') : 'Todas las fuentes';
 }
 
 function formatMetric(value: number | undefined) {
