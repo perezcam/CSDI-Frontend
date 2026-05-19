@@ -281,7 +281,7 @@ function MetricsExplanationPanel() {
       measures: 'Mide cuántos de los primeros K documentos recuperados son realmente relevantes.',
       interpretation: 'Un Precision@K alto indica que los primeros resultados son mayormente útiles.',
       bestValue: '1.0',
-      useCase: 'Útil cuando el profesor prioriza la calidad de los primeros resultados.',
+      useCase: 'Útil cuando se prioriza la calidad de los primeros resultados.',
     },
     {
       name: 'Recall@K',
@@ -358,9 +358,9 @@ function MetricsExplanationPanel() {
         <h3 className="text-lg font-semibold text-white">Cómo se relacionan con el flujo de evaluación</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-4 mt-5">
           {[
-            'El profesor crea o selecciona una consulta.',
+            'Se crea o selecciona una consulta.',
             'El sistema genera rankings con los métodos de retrieval elegidos.',
-            'El profesor asigna relevancia de 0 a 3 a cada fragmento recuperado.',
+            'Se asigna relevancia de 0 a 3 a cada fragmento recuperado.',
             'El backend calcula las métricas sobre rankings generados y juicios guardados.',
             'Las métricas comparan estrategias de retrieval, no cambian la fórmula de evaluación.',
           ].map((step, index) => (
