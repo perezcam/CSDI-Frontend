@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import {
   AlertCircle,
   BarChart3,
+  BookOpen,
   CheckCircle2,
   ChevronRight,
   Database,
@@ -31,7 +32,7 @@ import type {
 } from '../../types/api';
 
 type ExplorerMode = SearchMode | 'compare';
-type PageMode = 'explore' | 'evaluate';
+type PageMode = 'explore' | 'evaluate' | 'metrics';
 type SourceScope = 'all' | 'selected';
 
 const STRATEGIES: RetrievalStrategy[] = ['bm25', 'vector', 'hybrid'];
@@ -167,44 +168,48 @@ export function Search() {
         <div className="max-w-6xl mx-auto space-y-6">
           <ModeTabs pageMode={pageMode} onChange={setPageMode} />
 
-          <div className="flex gap-3">
-            <Input
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="Ingresa tu consulta de búsqueda para probar o guardar en evaluación..."
-              className="flex-1 bg-[#1a2332] border-[#2d3748] text-white placeholder:text-slate-500"
-              onKeyDown={(event) => event.key === 'Enter' && pageMode === 'explore' && handleSearch()}
-            />
-            {pageMode === 'explore' ? (
-              <Button
-                onClick={handleSearch}
-                disabled={isSearching || !query.trim()}
-                className="bg-gradient-to-br from-[#2563eb] to-[#1e40af] hover:from-[#1d4ed8] hover:to-[#1e3a8a] text-white shadow-lg shadow-blue-900/30"
-              >
-                <SearchIcon className="w-4 h-4 mr-2" />
-                Buscar
-              </Button>
-            ) : (
-              <Button
-                onClick={handleSaveCurrentQuery}
-                disabled={evaluation.isLoading || !query.trim()}
-                className="bg-blue-600 hover:bg-blue-700 text-white"
-              >
-                <Save className="w-4 h-4 mr-2" />
-                Guardar consulta actual
-              </Button>
-            )}
-          </div>
+          {pageMode !== 'metrics' && (
+            <>
+              <div className="flex gap-3">
+                <Input
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                  placeholder="Ingresa tu consulta de búsqueda para probar o guardar en evaluación..."
+                  className="flex-1 bg-[#1a2332] border-[#2d3748] text-white placeholder:text-slate-500"
+                  onKeyDown={(event) => event.key === 'Enter' && pageMode === 'explore' && handleSearch()}
+                />
+                {pageMode === 'explore' ? (
+                  <Button
+                    onClick={handleSearch}
+                    disabled={isSearching || !query.trim()}
+                    className="bg-gradient-to-br from-[#2563eb] to-[#1e40af] hover:from-[#1d4ed8] hover:to-[#1e3a8a] text-white shadow-lg shadow-blue-900/30"
+                  >
+                    <SearchIcon className="w-4 h-4 mr-2" />
+                    Buscar
+                  </Button>
+                ) : (
+                  <Button
+                    onClick={handleSaveCurrentQuery}
+                    disabled={evaluation.isLoading || !query.trim()}
+                    className="bg-blue-600 hover:bg-blue-700 text-white"
+                  >
+                    <Save className="w-4 h-4 mr-2" />
+                    Guardar consulta actual
+                  </Button>
+                )}
+              </div>
 
-          <ControlsPanel
-            pageMode={pageMode}
-            searchMode={searchMode}
-            setSearchMode={setSearchMode}
-            evaluationStrategies={evaluationStrategies}
-            setEvaluationStrategies={setEvaluationStrategies}
-            topK={topK}
-            setTopK={setTopK}
-          />
+              <ControlsPanel
+                pageMode={pageMode}
+                searchMode={searchMode}
+                setSearchMode={setSearchMode}
+                evaluationStrategies={evaluationStrategies}
+                setEvaluationStrategies={setEvaluationStrategies}
+                topK={topK}
+                setTopK={setTopK}
+              />
+            </>
+          )}
         </div>
       </div>
 
@@ -219,7 +224,7 @@ export function Search() {
               searchMode={searchMode}
               compareRows={compareRows}
             />
-          ) : (
+          ) : pageMode === 'evaluate' ? (
             <EvaluationPanel
               evaluation={evaluation}
               selectedQuery={selectedQuery}
@@ -235,6 +240,8 @@ export function Search() {
               onUpdateJudgment={handleUpdateJudgment}
               onRunEvaluation={handleRunEvaluation}
             />
+          ) : (
+            <MetricsExplanationPanel />
           )}
         </div>
       </div>
@@ -248,6 +255,7 @@ function ModeTabs({ pageMode, onChange }: { pageMode: PageMode; onChange: (mode:
       {([
         ['explore', 'Exploración'],
         ['evaluate', 'Evaluación'],
+        ['metrics', 'Métricas'],
       ] as const).map(([mode, label]) => (
         <button
           key={mode}
@@ -261,6 +269,134 @@ function ModeTabs({ pageMode, onChange }: { pageMode: PageMode; onChange: (mode:
           {label}
         </button>
       ))}
+    </div>
+  );
+}
+
+function MetricsExplanationPanel() {
+  const metricCards = [
+    {
+      name: 'Precision@K',
+      accent: 'cyan',
+      measures: 'Mide cuántos de los primeros K documentos recuperados son realmente relevantes.',
+      interpretation: 'Un Precision@K alto indica que los primeros resultados son mayormente útiles.',
+      bestValue: '1.0',
+      useCase: 'Útil cuando el profesor prioriza la calidad de los primeros resultados.',
+    },
+    {
+      name: 'Recall@K',
+      accent: 'emerald',
+      measures: 'Mide cuántos de todos los documentos relevantes disponibles fueron recuperados dentro de los primeros K.',
+      interpretation: 'Un Recall@K alto indica que el sistema encontró la mayor parte del material relevante juzgado.',
+      bestValue: '1.0',
+      useCase: 'Útil cuando perder documentos relevantes tiene un costo alto.',
+    },
+    {
+      name: 'F1@K',
+      accent: 'blue',
+      measures: 'Balancea armónicamente Precision@K y Recall@K en una sola métrica.',
+      interpretation: 'Un F1@K alto indica una estrategia equilibrada entre calidad y cobertura.',
+      bestValue: '1.0',
+      useCase: 'Útil para comparar métodos con un puntaje único y balanceado.',
+    },
+    {
+      name: 'MRR',
+      accent: 'amber',
+      measures: 'Mean Reciprocal Rank. Mide qué tan pronto aparece el primer documento relevante en el ranking.',
+      interpretation: 'Un MRR alto indica que el primer resultado útil aparece muy arriba.',
+      bestValue: '1.0',
+      useCase: 'Útil en búsqueda o question answering donde importa mucho el primer acierto.',
+    },
+    {
+      name: 'NDCG@K',
+      accent: 'violet',
+      measures: 'Evalúa la calidad del ranking usando relevancia graduada y penalizando los documentos muy relevantes ubicados demasiado abajo.',
+      interpretation: 'Un NDCG@K alto indica que los documentos más relevantes quedaron cerca del inicio del ranking.',
+      bestValue: '1.0',
+      useCase: 'Especialmente útil aquí porque el proyecto usa niveles de relevancia 0, 1, 2 y 3.',
+    },
+  ] as const;
+
+  return (
+    <div className="space-y-6">
+      <section className="bg-[#0f1419] border border-[#1a2332] rounded-lg p-6">
+        <div className="flex items-start gap-4">
+          <div className="w-12 h-12 rounded-xl bg-blue-500/15 border border-blue-500/30 flex items-center justify-center flex-shrink-0">
+            <BookOpen className="w-5 h-5 text-blue-300" />
+          </div>
+          <div className="min-w-0">
+            <h2 className="text-2xl font-semibold text-white">Métricas de evaluación IR</h2>
+            <p className="text-sm text-slate-400 mt-2">
+              Estas métricas permiten medir la calidad de los rankings generados por BM25, búsqueda vectorial e híbrida.
+            </p>
+            <p className="text-sm text-slate-300 mt-4">
+              El método de retrieval seleccionado no cambia la fórmula de las métricas. Lo que cambia es el ranking de documentos sobre el que se calculan.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+        {metricCards.map((metric) => (
+          <article key={metric.name} className="bg-[#0f1419] border border-[#1a2332] rounded-lg p-5">
+            <div className="flex items-center justify-between gap-3">
+              <h3 className="text-lg font-semibold text-white">{metric.name}</h3>
+              <span className={getMetricAccent(metric.accent)}>
+                Mejor valor: {metric.bestValue}
+              </span>
+            </div>
+            <div className="space-y-4 mt-4">
+              <MetricDetail label="Qué mide" value={metric.measures} />
+              <MetricDetail label="Cómo interpretarla" value={metric.interpretation} />
+              <MetricDetail label="Ejemplo de uso" value={metric.useCase} />
+            </div>
+          </article>
+        ))}
+      </section>
+
+      <section className="bg-[#0f1419] border border-[#1a2332] rounded-lg p-6">
+        <h3 className="text-lg font-semibold text-white">Cómo se relacionan con el flujo de evaluación</h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-4 mt-5">
+          {[
+            'El profesor crea o selecciona una consulta.',
+            'El sistema genera rankings con los métodos de retrieval elegidos.',
+            'El profesor asigna relevancia de 0 a 3 a cada fragmento recuperado.',
+            'El backend calcula las métricas sobre rankings generados y juicios guardados.',
+            'Las métricas comparan estrategias de retrieval, no cambian la fórmula de evaluación.',
+          ].map((step, index) => (
+            <div key={step} className="bg-[#121a28] border border-[#1a2332] rounded-lg p-4">
+              <p className="text-xs font-mono text-blue-400">Paso {index + 1}</p>
+              <p className="text-sm text-slate-300 mt-2">{step}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="bg-[#0f1419] border border-[#1a2332] rounded-lg p-6">
+        <h3 className="text-lg font-semibold text-white">Escala de relevancia</h3>
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mt-5">
+          {([
+            [0, 'No relevante', 'bg-slate-500/15 text-slate-300 border-slate-500/30'],
+            [1, 'Marginal', 'bg-amber-500/15 text-amber-300 border-amber-500/30'],
+            [2, 'Relevante', 'bg-blue-500/15 text-blue-300 border-blue-500/30'],
+            [3, 'Muy relevante', 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'],
+          ] as const).map(([value, label, tone]) => (
+            <div key={value} className={`rounded-lg border p-4 ${tone}`}>
+              <p className="text-sm font-semibold">{value}</p>
+              <p className="text-sm mt-2">{label}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function MetricDetail({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <p className="text-xs uppercase tracking-wide text-slate-500">{label}</p>
+      <p className="text-sm text-slate-300 mt-1">{value}</p>
     </div>
   );
 }
@@ -1053,6 +1189,16 @@ function getSearchModeColor(mode: ExplorerMode) {
     case 'vector': return 'bg-purple-500/20 text-purple-400 border-purple-500/30';
     case 'hybrid': return 'bg-blue-500/20 text-blue-400 border-blue-500/30';
     case 'compare': return 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30';
+  }
+}
+
+function getMetricAccent(accent: 'cyan' | 'emerald' | 'blue' | 'amber' | 'violet') {
+  switch (accent) {
+    case 'cyan': return 'inline-flex items-center rounded-full border border-cyan-500/30 bg-cyan-500/15 px-3 py-1 text-xs font-medium text-cyan-300';
+    case 'emerald': return 'inline-flex items-center rounded-full border border-emerald-500/30 bg-emerald-500/15 px-3 py-1 text-xs font-medium text-emerald-300';
+    case 'blue': return 'inline-flex items-center rounded-full border border-blue-500/30 bg-blue-500/15 px-3 py-1 text-xs font-medium text-blue-300';
+    case 'amber': return 'inline-flex items-center rounded-full border border-amber-500/30 bg-amber-500/15 px-3 py-1 text-xs font-medium text-amber-300';
+    case 'violet': return 'inline-flex items-center rounded-full border border-violet-500/30 bg-violet-500/15 px-3 py-1 text-xs font-medium text-violet-300';
   }
 }
 
