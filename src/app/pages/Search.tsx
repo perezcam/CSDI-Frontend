@@ -4,6 +4,7 @@ import {
   AlertCircle,
   BarChart3,
   CheckCircle2,
+  ChevronRight,
   Database,
   FileText,
   GitCompare,
@@ -707,6 +708,8 @@ function EvaluationResultCard({
   relevance: number | null;
   onUpdateJudgment: (chunkId: string, relevance: 0 | 1 | 2 | 3) => void;
 }) {
+  const [isExpanded, setIsExpanded] = useState(false);
+
   return (
     <div className="p-5">
       <div className="flex items-start gap-4">
@@ -715,28 +718,42 @@ function EvaluationResultCard({
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex items-start justify-between gap-4">
-            <div>
+            <div className="min-w-0">
               <h4 className="font-semibold text-white">{item.title || item.chunk_id}</h4>
               <p className="text-xs text-slate-500 font-mono mt-1">{item.chunk_id}</p>
             </div>
-            <select
-              value={relevance ?? ''}
-              onChange={(event) => onUpdateJudgment(item.chunk_id, Number(event.target.value) as 0 | 1 | 2 | 3)}
-              className="bg-[#1a2332] border border-[#2d3748] rounded-md px-3 py-2 text-sm text-slate-200"
-            >
-              <option value="" disabled>Relevancia</option>
-              {([0, 1, 2, 3] as const).map(value => (
-                <option key={value} value={value}>{RELEVANCE_LABELS[value]}</option>
-              ))}
-            </select>
+            <div className="flex items-center gap-2 flex-shrink-0">
+              <button
+                type="button"
+                onClick={() => setIsExpanded(prev => !prev)}
+                aria-label={isExpanded ? 'Contraer contenido' : 'Expandir contenido'}
+                className="w-9 h-9 rounded-md border border-[#2d3748] bg-[#1a2332] text-slate-300 hover:text-white hover:border-blue-500/50 flex items-center justify-center transition-all"
+              >
+                <ChevronRight className={`w-4 h-4 transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
+              </button>
+              <select
+                value={relevance ?? ''}
+                onChange={(event) => onUpdateJudgment(item.chunk_id, Number(event.target.value) as 0 | 1 | 2 | 3)}
+                className="bg-[#1a2332] border border-[#2d3748] rounded-md px-3 py-2 text-sm text-slate-200"
+              >
+                <option value="" disabled>Relevancia</option>
+                {([0, 1, 2, 3] as const).map(value => (
+                  <option key={value} value={value}>{RELEVANCE_LABELS[value]}</option>
+                ))}
+              </select>
+            </div>
           </div>
-          {item.url && (
-            <a href={item.url} target="_blank" rel="noopener noreferrer" className="text-sm text-blue-400 hover:text-blue-300 mt-2 inline-block">
-              {item.url}
-            </a>
+          {isExpanded && (
+            <div className="mt-3">
+              {item.url && (
+                <a href={item.url} target="_blank" rel="noopener noreferrer" className="text-sm text-blue-400 hover:text-blue-300 inline-block">
+                  {item.url}
+                </a>
+              )}
+              {item.text && <p className="text-sm text-slate-400 mt-3">{item.text}</p>}
+              {item.breadcrumb && <p className="text-xs text-slate-500 mt-2 italic">{item.breadcrumb}</p>}
+            </div>
           )}
-          {item.text && <p className="text-sm text-slate-400 mt-3">{item.text}</p>}
-          {item.breadcrumb && <p className="text-xs text-slate-500 mt-2 italic">{item.breadcrumb}</p>}
           <div className="flex items-center gap-4 flex-wrap mt-3">
             {item.source_id && <span className="text-xs text-slate-500">Fuente: {item.source_id}</span>}
             {item.score !== null && item.score !== undefined && (
@@ -862,6 +879,8 @@ function SearchRunSection({ mode, results, title }: { mode: SearchMode; results:
 }
 
 function SearchResultCard({ result }: { result: SearchResultItem }) {
+  const [isExpanded, setIsExpanded] = useState(false);
+
   return (
     <div className="bg-[#0f1419] border border-[#1a2332] rounded-lg p-6 hover:border-blue-500/40 transition-all">
       <div className="flex items-start gap-4">
@@ -870,19 +889,33 @@ function SearchResultCard({ result }: { result: SearchResultItem }) {
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-start justify-between gap-4 mb-2">
-            <h3 className="font-semibold text-white">{result.title}</h3>
-            <div className="flex items-center gap-2">
-              <TrendingUp className="w-4 h-4 text-blue-400" />
-              <span className="font-semibold text-blue-400">{(result.score * 100).toFixed(1)}%</span>
+            <h3 className="font-semibold text-white min-w-0">{result.title}</h3>
+            <div className="flex items-center gap-2 flex-shrink-0">
+              <button
+                type="button"
+                onClick={() => setIsExpanded(prev => !prev)}
+                aria-label={isExpanded ? 'Contraer contenido' : 'Expandir contenido'}
+                className="w-9 h-9 rounded-md border border-[#2d3748] bg-[#1a2332] text-slate-300 hover:text-white hover:border-blue-500/50 flex items-center justify-center transition-all"
+              >
+                <ChevronRight className={`w-4 h-4 transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
+              </button>
+              <div className="flex items-center gap-2">
+                <TrendingUp className="w-4 h-4 text-blue-400" />
+                <span className="font-semibold text-blue-400">{(result.score * 100).toFixed(1)}%</span>
+              </div>
             </div>
           </div>
-          {result.url && (
-            <a href={result.url} target="_blank" rel="noopener noreferrer" className="text-sm text-blue-400 hover:text-blue-300 mb-3 inline-block">
-              {result.url}
-            </a>
+          {isExpanded && (
+            <div className="mb-3">
+              {result.url && (
+                <a href={result.url} target="_blank" rel="noopener noreferrer" className="text-sm text-blue-400 hover:text-blue-300 inline-block">
+                  {result.url}
+                </a>
+              )}
+              {result.text && <p className="text-sm text-slate-400 mt-3">{result.text}</p>}
+              {result.breadcrumb && <p className="text-xs text-slate-500 mt-2 italic">{result.breadcrumb}</p>}
+            </div>
           )}
-          {result.text && <p className="text-sm text-slate-400 mb-3">{result.text}</p>}
-          {result.breadcrumb && <p className="text-xs text-slate-500 mb-2 italic">{result.breadcrumb}</p>}
           <div className="flex items-center gap-3 flex-wrap mt-1">
             {result.sourceId && (
               <div className="flex items-center gap-1">
