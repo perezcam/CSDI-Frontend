@@ -1,18 +1,78 @@
-import { useMemo, useState } from 'react';
-import { Search as SearchIcon, TrendingUp, Database, AlertCircle, GitCompare, FileText } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import type { ReactNode } from 'react';
+import {
+  AlertCircle,
+  BarChart3,
+  CheckCircle2,
+  Database,
+  FileText,
+  GitCompare,
+  ListChecks,
+  Save,
+  Search as SearchIcon,
+  Star,
+  TrendingUp,
+} from 'lucide-react';
+import { toast } from 'sonner';
 import { Input } from '../components/ui/input';
 import { Button } from '../components/ui/button';
 import { Slider } from '../components/ui/slider';
 import { Badge } from '../components/ui/badge';
-import { useSearch, type SearchMode } from '../../hooks/useSearch';
+import { useSearch, type SearchMode, type SearchResultItem } from '../../hooks/useSearch';
+import { useEvaluation } from '../../hooks/useEvaluation';
+import type {
+  EvaluationRankingResult,
+  EvaluationRankingsResponse,
+  EvaluationReport,
+  RetrievalStrategy,
+  StrategyMetrics,
+} from '../../types/api';
 
 type ExplorerMode = SearchMode | 'compare';
+type PageMode = 'explore' | 'evaluate';
+
+const STRATEGIES: RetrievalStrategy[] = ['bm25', 'vector', 'hybrid'];
+const RELEVANCE_LABELS = {
+  0: '0 No relevante',
+  1: '1 Marginal',
+  2: '2 Relevante',
+  3: '3 Muy relevante',
+} as const;
+const METRIC_KEYS: Array<keyof StrategyMetrics> = [
+  'precision_at_k',
+  'recall_at_k',
+  'f1_at_k',
+  'reciprocal_rank',
+  'ndcg_at_k',
+];
 
 export function Search() {
   const [query, setQuery] = useState('');
+  const [pageMode, setPageMode] = useState<PageMode>('explore');
   const [searchMode, setSearchMode] = useState<ExplorerMode>('hybrid');
   const [topK, setTopK] = useState([10]);
   const { results, runs, isSearching, error, search, compareAll } = useSearch();
+  const evaluation = useEvaluation();
+
+  useEffect(() => {
+    void evaluation.loadQueries();
+    void evaluation.loadSummary();
+    void evaluation.loadReport();
+  }, []);
+
+  const selectedQuery = useMemo(
+    () => evaluation.queries.find(item => item.id === evaluation.selectedQueryId) ?? null,
+    [evaluation.queries, evaluation.selectedQueryId],
+  );
+
+  const selectedStrategies = useMemo<RetrievalStrategy[]>(
+    () => (searchMode === 'compare' ? STRATEGIES : [searchMode]),
+    [searchMode],
+  );
+
+  const compareRows = useCompareRows(runs, topK[0]);
+  const latestReport = evaluation.report;
+  const bestNdcgStrategy = useBestStrategy(latestReport, 'ndcg_at_k');
 
   const handleSearch = () => {
     if (searchMode === 'compare') {
@@ -21,284 +81,759 @@ export function Search() {
     return search(query, searchMode, topK[0]);
   };
 
-  const getSearchModeColor = (mode: SearchMode) => {
-    switch (mode) {
-      case 'bm25': return 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30';
-      case 'vector': return 'bg-purple-500/20 text-purple-400 border-purple-500/30';
-      case 'hybrid': return 'bg-blue-500/20 text-blue-400 border-blue-500/30';
+  const handleSaveCurrentQuery = async () => {
+    if (!query.trim()) return;
+    try {
+      const created = await evaluation.createQuery({ query: query.trim() });
+      if (created) toast.success('Consulta guardada para evaluación');
+    } catch {
+      toast.error('No se pudo guardar la consulta');
     }
   };
 
-  const compareRows = useMemo(() => {
-    const byMode: Record<SearchMode, { id: string; rank: number; score: number }[]> = {
-      hybrid: [], bm25: [], vector: [],
-    };
-    for (const run of runs) {
-      byMode[run.mode] = run.results.map(r => ({ id: r.id, rank: r.rank, score: r.score }));
+  const handleSelectQuery = async (queryId: string) => {
+    const selected = evaluation.queries.find(item => item.id === queryId);
+    if (selected) setQuery(selected.query);
+    try {
+      await evaluation.selectQuery(queryId);
+    } catch {
+      toast.error('No se pudo cargar la consulta de evaluación');
     }
+  };
 
-    const set = new Set<string>();
-    byMode.hybrid.forEach(r => set.add(r.id));
-    byMode.bm25.forEach(r => set.add(r.id));
-    byMode.vector.forEach(r => set.add(r.id));
+  const handleRunEvaluationRankings = async () => {
+    if (!evaluation.selectedQueryId) return;
+    try {
+      await evaluation.runRankings(evaluation.selectedQueryId, {
+        top_k: topK[0],
+        strategies: selectedStrategies,
+      });
+      toast.success('Rankings de evaluación actualizados');
+    } catch {
+      toast.error('No se pudo ejecutar el ranking de evaluación');
+    }
+  };
 
-    return Array.from(set).slice(0, topK[0]).map((id) => {
-      const h = byMode.hybrid.find(r => r.id === id);
-      const b = byMode.bm25.find(r => r.id === id);
-      const v = byMode.vector.find(r => r.id === id);
-      return {
-        id,
-        hybridRank: h?.rank ?? null,
-        bm25Rank: b?.rank ?? null,
-        vectorRank: v?.rank ?? null,
-      };
-    });
-  }, [runs, topK]);
+  const handleUpdateJudgment = async (chunkId: string, relevance: 0 | 1 | 2 | 3) => {
+    if (!evaluation.selectedQueryId) return;
+    try {
+      await evaluation.updateJudgment(evaluation.selectedQueryId, chunkId, { relevance });
+      toast.success('Relevancia guardada');
+    } catch {
+      toast.error('No se pudo guardar la relevancia');
+    }
+  };
+
+  const handleRunEvaluation = async () => {
+    try {
+      await evaluation.runEvaluation(topK[0]);
+      toast.success('Evaluación ejecutada');
+    } catch {
+      toast.error('No se pudo ejecutar la evaluación');
+    }
+  };
 
   return (
     <div className="h-full flex flex-col bg-[#0a0e1a]">
       <div className="bg-[#0f1419] border-b border-[#1a2332] px-6 py-4">
         <h1 className="font-semibold text-white">Explorador de Búsqueda</h1>
-        <p className="text-sm text-slate-400">Compara BM25, vectorial e híbrido para auditar retrieval y ranking</p>
+        <p className="text-sm text-slate-400">Explora retrieval y construye datasets de evaluación IR</p>
       </div>
 
       <div className="bg-[#0f1419] border-b border-[#1a2332] px-6 py-6">
-        <div className="max-w-5xl mx-auto space-y-6">
+        <div className="max-w-6xl mx-auto space-y-6">
+          <ModeTabs pageMode={pageMode} onChange={setPageMode} />
+
           <div className="flex gap-3">
             <Input
               value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Ingresa tu consulta de búsqueda para probar el retrieval..."
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Ingresa tu consulta de búsqueda para probar o guardar en evaluación..."
               className="flex-1 bg-[#1a2332] border-[#2d3748] text-white placeholder:text-slate-500"
-              onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+              onKeyDown={(event) => event.key === 'Enter' && pageMode === 'explore' && handleSearch()}
             />
-            <Button
-              onClick={handleSearch}
-              disabled={isSearching || !query.trim()}
-              className="bg-gradient-to-br from-[#2563eb] to-[#1e40af] hover:from-[#1d4ed8] hover:to-[#1e3a8a] text-white shadow-lg shadow-blue-900/30"
-            >
-              <SearchIcon className="w-4 h-4 mr-2" />
-              Buscar
-            </Button>
+            {pageMode === 'explore' ? (
+              <Button
+                onClick={handleSearch}
+                disabled={isSearching || !query.trim()}
+                className="bg-gradient-to-br from-[#2563eb] to-[#1e40af] hover:from-[#1d4ed8] hover:to-[#1e3a8a] text-white shadow-lg shadow-blue-900/30"
+              >
+                <SearchIcon className="w-4 h-4 mr-2" />
+                Buscar
+              </Button>
+            ) : (
+              <Button
+                onClick={handleSaveCurrentQuery}
+                disabled={evaluation.isLoading || !query.trim()}
+                className="bg-blue-600 hover:bg-blue-700 text-white"
+              >
+                <Save className="w-4 h-4 mr-2" />
+                Guardar consulta actual
+              </Button>
+            )}
           </div>
 
-          <div className="grid grid-cols-2 gap-6">
-            <div>
-              <label className="text-sm font-medium text-slate-300 mb-3 block">
-                Modo de Exploración
-              </label>
-              <div className="grid grid-cols-2 gap-2">
-                {(['bm25', 'vector', 'hybrid', 'compare'] as const).map((mode) => (
-                  <button
-                    key={mode}
-                    onClick={() => setSearchMode(mode)}
-                    className={`
-                      px-4 py-2 rounded-lg border text-sm font-medium transition-all
-                      ${searchMode === mode
-                        ? (mode === 'compare'
-                          ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
-                          : getSearchModeColor(mode))
-                        : 'bg-[#1a2332] border-[#2d3748] text-slate-400 hover:bg-[#1f2937] hover:text-slate-300'
-                      }
-                    `}
-                  >
-                    {mode === 'bm25' ? 'Solo BM25' : mode === 'vector' ? 'Solo Vector' : mode === 'hybrid' ? 'Solo Híbrido' : 'Comparar (3 métodos)'}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div>
-              <label className="text-sm font-medium text-slate-300 mb-3 block">
-                Top K Resultados: <span className="text-blue-400">{topK[0]}</span>
-              </label>
-              <div className="pt-2">
-                <Slider
-                  value={topK}
-                  onValueChange={setTopK}
-                  min={1}
-                  max={20}
-                  step={1}
-                  className="w-full"
-                />
-              </div>
-            </div>
-          </div>
+          <ControlsPanel
+            searchMode={searchMode}
+            setSearchMode={setSearchMode}
+            topK={topK}
+            setTopK={setTopK}
+          />
         </div>
       </div>
 
       <div className="flex-1 overflow-y-auto px-6 py-6">
-        <div className="max-w-5xl mx-auto">
-          {error && (
-            <div className="mb-6 bg-red-500/10 border border-red-500/30 rounded-lg p-4 flex items-center gap-3">
-              <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0" />
-              <p className="text-sm text-red-300">{error}</p>
-            </div>
-          )}
-
-          {results.length === 0 && runs.length === 0 && !isSearching && !error ? (
-            <div className="text-center py-16">
-              <div className="w-16 h-16 bg-slate-800/50 border border-slate-700 rounded-xl flex items-center justify-center mx-auto mb-4">
-                <SearchIcon className="w-8 h-8 text-slate-500" />
-              </div>
-              <h3 className="font-semibold text-white mb-2">No se ha realizado ninguna búsqueda</h3>
-              <p className="text-sm text-slate-400">
-                Usa "Comparar (3 métodos)" para validar ranking y cobertura entre BM25, vector e híbrido
-              </p>
-            </div>
-          ) : isSearching ? (
-            <div className="text-center py-16">
-              <div className="inline-block w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mb-4"></div>
-              <p className="text-sm text-slate-300">Buscando...</p>
-            </div>
+        <div className="max-w-6xl mx-auto">
+          {pageMode === 'explore' ? (
+            <ExplorePanel
+              error={error}
+              isSearching={isSearching}
+              results={results}
+              runs={runs}
+              searchMode={searchMode}
+              compareRows={compareRows}
+            />
           ) : (
-            <div className="space-y-6">
-              {searchMode === 'compare' && runs.length > 0 && (
-                <div className="bg-[#0f1419] border border-[#1a2332] rounded-lg overflow-hidden">
-                  <div className="px-6 py-4 bg-[#1a2332] border-b border-[#2d3748] flex items-center gap-2">
-                    <GitCompare className="w-4 h-4 text-emerald-400" />
-                    <h2 className="font-semibold text-white">Comparación de Ranking por Chunk</h2>
-                  </div>
-                  <table className="w-full">
-                    <thead className="bg-[#121a28] border-b border-[#2d3748]">
-                      <tr>
-                        <th className="text-left px-4 py-3 text-xs text-slate-400">Fuente</th>
-                        <th className="text-left px-4 py-3 text-xs text-slate-400">Fragmento</th>
-                        <th className="text-left px-4 py-3 text-xs text-slate-400">Doc hash</th>
-                        <th className="text-left px-4 py-3 text-xs text-slate-400">Híbrido</th>
-                        <th className="text-left px-4 py-3 text-xs text-slate-400">BM25</th>
-                        <th className="text-left px-4 py-3 text-xs text-slate-400">Vector</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-[#1a2332]">
-                      {compareRows.map((row) => {
-                        const parts = row.id.split(':');
-                        const src = parts[0] ?? row.id;
-                        const hash = parts.length >= 3 ? parts[parts.length - 2] : '';
-                        const idx = parts.length >= 3 ? parts[parts.length - 1] : '';
-                        return (
-                          <tr key={row.id} title={row.id}>
-                            <td className="px-4 py-3 text-xs text-cyan-400 font-mono">{src}</td>
-                            <td className="px-4 py-3 text-xs text-slate-200 font-mono">#{idx}</td>
-                            <td className="px-4 py-3 text-xs text-slate-500 font-mono">{hash}</td>
-                            <td className="px-4 py-3 text-sm text-slate-200">{row.hybridRank ?? '—'}</td>
-                            <td className="px-4 py-3 text-sm text-slate-200">{row.bm25Rank ?? '—'}</td>
-                            <td className="px-4 py-3 text-sm text-slate-200">{row.vectorRank ?? '—'}</td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-
-              {runs.length > 0 ? runs.map((run) => (
-                <div key={run.mode}>
-                  <div className="mb-4">
-                    <h2 className="font-semibold text-white">Resultados {run.mode.toUpperCase()}</h2>
-                    <p className="text-sm text-slate-400 mt-1">
-                      {run.results.length} resultados · <Badge className={getSearchModeColor(run.mode)}>{run.mode}</Badge>
-                    </p>
-                  </div>
-                  <div className="space-y-4">
-                    {run.results.map((result) => (
-                      <div key={`${run.mode}-${result.id}`} className="bg-[#0f1419] border border-[#1a2332] rounded-lg p-6 hover:border-blue-500/40 transition-all">
-                        <div className="flex items-start gap-4">
-                          <div className="flex-shrink-0">
-                            <div className="w-10 h-10 bg-[#1a2332] border border-[#2d3748] rounded-lg flex items-center justify-center">
-                              <span className="font-semibold text-slate-300">#{result.rank}</span>
-                            </div>
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-start justify-between gap-4 mb-2">
-                              <h3 className="font-semibold text-white">{result.title}</h3>
-                              <div className="flex items-center gap-2">
-                                <TrendingUp className="w-4 h-4 text-blue-400" />
-                                <span className="font-semibold text-blue-400">{(result.score * 100).toFixed(1)}%</span>
-                              </div>
-                            </div>
-                            {result.url && (
-                              <a href={result.url} target="_blank" rel="noopener noreferrer" className="text-sm text-blue-400 hover:text-blue-300 mb-3 inline-block">
-                                {result.url}
-                              </a>
-                            )}
-                            {result.text && <p className="text-sm text-slate-400 mb-3">{result.text}</p>}
-                            {result.breadcrumb && <p className="text-xs text-slate-500 mb-2 italic">{result.breadcrumb}</p>}
-                            <div className="flex items-center gap-3 flex-wrap mt-1">
-                              {result.sourceId && (
-                                <div className="flex items-center gap-1">
-                                  <Database className="w-3 h-3 text-slate-500" />
-                                  <span className="text-xs text-slate-500">{result.sourceId}</span>
-                                </div>
-                              )}
-                              <div className="flex items-center gap-1">
-                                <FileText className="w-3 h-3 text-slate-500" />
-                                <span className="text-xs text-slate-500 font-mono">fragmento #{result.chunkIndex} · {result.docHash}</span>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )) : (
-                <div>
-                  <div className="flex items-center justify-between mb-6">
-                    <div>
-                      <h2 className="font-semibold text-white">Resultados de Búsqueda</h2>
-                      <p className="text-sm text-slate-400 mt-1">
-                        Se encontraron {results.length} resultados
-                      </p>
-                    </div>
-                  </div>
-                  <div className="space-y-4">
-                    {results.map((result) => (
-                      <div key={result.id} className="bg-[#0f1419] border border-[#1a2332] rounded-lg p-6 hover:border-blue-500/40 transition-all">
-                        <div className="flex items-start gap-4">
-                          <div className="flex-shrink-0">
-                            <div className="w-10 h-10 bg-[#1a2332] border border-[#2d3748] rounded-lg flex items-center justify-center">
-                              <span className="font-semibold text-slate-300">#{result.rank}</span>
-                            </div>
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-start justify-between gap-4 mb-2">
-                              <h3 className="font-semibold text-white">{result.title}</h3>
-                              <div className="flex items-center gap-2">
-                                <TrendingUp className="w-4 h-4 text-blue-400" />
-                                <span className="font-semibold text-blue-400">{(result.score * 100).toFixed(1)}%</span>
-                              </div>
-                            </div>
-                            {result.url && (
-                              <a href={result.url} target="_blank" rel="noopener noreferrer" className="text-sm text-blue-400 hover:text-blue-300 mb-3 inline-block">
-                                {result.url}
-                              </a>
-                            )}
-                            {result.text && <p className="text-sm text-slate-400 mb-3">{result.text}</p>}
-                            {result.breadcrumb && <p className="text-xs text-slate-500 mb-2 italic">{result.breadcrumb}</p>}
-                            <div className="flex items-center gap-3 flex-wrap mt-1">
-                              {result.sourceId && (
-                                <div className="flex items-center gap-1">
-                                  <Database className="w-3 h-3 text-slate-500" />
-                                  <span className="text-xs text-slate-500">{result.sourceId}</span>
-                                </div>
-                              )}
-                              <div className="flex items-center gap-1">
-                                <FileText className="w-3 h-3 text-slate-500" />
-                                <span className="text-xs text-slate-500 font-mono">fragmento #{result.chunkIndex} · {result.docHash}</span>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
+            <EvaluationPanel
+              evaluation={evaluation}
+              selectedQuery={selectedQuery}
+              selectedStrategies={selectedStrategies}
+              topK={topK[0]}
+              bestNdcgStrategy={bestNdcgStrategy}
+              onSelectQuery={handleSelectQuery}
+              onRunRankings={handleRunEvaluationRankings}
+              onUpdateJudgment={handleUpdateJudgment}
+              onRunEvaluation={handleRunEvaluation}
+            />
           )}
         </div>
       </div>
     </div>
   );
+}
+
+function ModeTabs({ pageMode, onChange }: { pageMode: PageMode; onChange: (mode: PageMode) => void }) {
+  return (
+    <div className="inline-flex bg-[#1a2332] border border-[#2d3748] rounded-lg p-1">
+      {([
+        ['explore', 'Exploración'],
+        ['evaluate', 'Evaluación'],
+      ] as const).map(([mode, label]) => (
+        <button
+          key={mode}
+          onClick={() => onChange(mode)}
+          className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${
+            pageMode === mode
+              ? 'bg-blue-600 text-white'
+              : 'text-slate-400 hover:text-slate-200'
+          }`}
+        >
+          {label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function ControlsPanel({
+  searchMode,
+  setSearchMode,
+  topK,
+  setTopK,
+}: {
+  searchMode: ExplorerMode;
+  setSearchMode: (mode: ExplorerMode) => void;
+  topK: number[];
+  setTopK: (value: number[]) => void;
+}) {
+  return (
+    <div className="grid grid-cols-2 gap-6">
+      <div>
+        <label className="text-sm font-medium text-slate-300 mb-3 block">
+          Método de Retrieval
+        </label>
+        <div className="grid grid-cols-2 gap-2">
+          {(['bm25', 'vector', 'hybrid', 'compare'] as const).map((mode) => (
+            <button
+              key={mode}
+              onClick={() => setSearchMode(mode)}
+              className={`px-4 py-2 rounded-lg border text-sm font-medium transition-all ${
+                searchMode === mode
+                  ? getSearchModeColor(mode)
+                  : 'bg-[#1a2332] border-[#2d3748] text-slate-400 hover:bg-[#1f2937] hover:text-slate-300'
+              }`}
+            >
+              {mode === 'bm25' ? 'Solo BM25' : mode === 'vector' ? 'Solo Vector' : mode === 'hybrid' ? 'Solo Híbrido' : 'Comparar (3 métodos)'}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div>
+        <label className="text-sm font-medium text-slate-300 mb-3 block">
+          Top K Resultados: <span className="text-blue-400">{topK[0]}</span>
+        </label>
+        <div className="pt-2">
+          <Slider
+            value={topK}
+            onValueChange={setTopK}
+            min={1}
+            max={20}
+            step={1}
+            className="w-full"
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ExplorePanel({
+  error,
+  isSearching,
+  results,
+  runs,
+  searchMode,
+  compareRows,
+}: {
+  error: string | null;
+  isSearching: boolean;
+  results: SearchResultItem[];
+  runs: ReturnType<typeof useSearch>['runs'];
+  searchMode: ExplorerMode;
+  compareRows: ReturnType<typeof useCompareRows>;
+}) {
+  if (error) return <ErrorBox message={error} />;
+  if (isSearching) return <LoadingState label="Buscando..." />;
+  if (results.length === 0 && runs.length === 0) {
+    return (
+      <EmptyState
+        icon={<SearchIcon className="w-8 h-8 text-slate-500" />}
+        title="No se ha realizado ninguna búsqueda"
+        text="Usa Comparar para validar ranking y cobertura entre BM25, vector e híbrido"
+      />
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      {searchMode === 'compare' && runs.length > 0 && <CompareTable rows={compareRows} />}
+      {runs.length > 0 ? (
+        runs.map((run) => (
+          <SearchRunSection key={run.mode} mode={run.mode} results={run.results} />
+        ))
+      ) : (
+        <SearchRunSection mode="hybrid" results={results} title="Resultados de Búsqueda" />
+      )}
+    </div>
+  );
+}
+
+function EvaluationPanel({
+  evaluation,
+  selectedQuery,
+  selectedStrategies,
+  topK,
+  bestNdcgStrategy,
+  onSelectQuery,
+  onRunRankings,
+  onUpdateJudgment,
+  onRunEvaluation,
+}: {
+  evaluation: ReturnType<typeof useEvaluation>;
+  selectedQuery: { id: string; query: string; source_ids?: string[] | null } | null;
+  selectedStrategies: RetrievalStrategy[];
+  topK: number;
+  bestNdcgStrategy: RetrievalStrategy | null;
+  onSelectQuery: (queryId: string) => void;
+  onRunRankings: () => void;
+  onUpdateJudgment: (chunkId: string, relevance: 0 | 1 | 2 | 3) => void;
+  onRunEvaluation: () => void;
+}) {
+  return (
+    <div className="space-y-6">
+      {evaluation.error && <ErrorBox message={evaluation.error} />}
+      <SummaryCards summary={evaluation.summary} bestNdcgStrategy={bestNdcgStrategy} />
+
+      <div className="grid grid-cols-[320px_1fr] gap-6">
+        <div className="bg-[#0f1419] border border-[#1a2332] rounded-lg p-5 h-fit">
+          <div className="flex items-center gap-2 mb-4">
+            <ListChecks className="w-4 h-4 text-blue-400" />
+            <h2 className="font-semibold text-white">Dataset de evaluación</h2>
+          </div>
+          {evaluation.queries.length === 0 ? (
+            <p className="text-sm text-slate-400">No hay consultas persistidas todavía.</p>
+          ) : (
+            <div className="space-y-2">
+              {evaluation.queries.map((item) => (
+                <button
+                  key={item.id}
+                  onClick={() => onSelectQuery(item.id)}
+                  className={`w-full text-left px-3 py-3 rounded-lg border transition-all ${
+                    evaluation.selectedQueryId === item.id
+                      ? 'bg-blue-500/10 border-blue-500/40'
+                      : 'bg-[#121a28] border-[#1a2332] hover:border-[#2d3748]'
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs font-mono text-cyan-400">{item.id}</span>
+                    {item.source_ids?.[0] && <span className="text-xs text-slate-500">{item.source_ids[0]}</span>}
+                  </div>
+                  <p className="text-sm text-slate-200 mt-1 line-clamp-2">{item.query}</p>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="space-y-6">
+          <div className="bg-[#0f1419] border border-[#1a2332] rounded-lg p-5">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h2 className="font-semibold text-white">Ranking de evaluación</h2>
+                <p className="text-sm text-slate-400 mt-1">
+                  {selectedQuery ? selectedQuery.query : 'Selecciona o guarda una consulta para empezar.'}
+                </p>
+              </div>
+              <Button
+                onClick={onRunRankings}
+                disabled={!selectedQuery || evaluation.isRunningRankings}
+                className="bg-blue-600 hover:bg-blue-700 text-white"
+              >
+                <SearchIcon className="w-4 h-4 mr-2" />
+                Ejecutar ranking
+              </Button>
+            </div>
+            <div className="flex items-center gap-2 mt-4">
+              <span className="text-xs text-slate-500">Top K {topK}</span>
+              {selectedStrategies.map(strategy => (
+                <Badge key={strategy} className={getSearchModeColor(strategy)}>{strategy}</Badge>
+              ))}
+            </div>
+          </div>
+
+          <EvaluationRankings
+            rankings={evaluation.evaluationRankings}
+            judgments={evaluation.judgments}
+            isLoading={evaluation.isRunningRankings}
+            onUpdateJudgment={onUpdateJudgment}
+          />
+
+          <MetricsPanel
+            report={evaluation.report}
+            isRunning={evaluation.isRunningEvaluation}
+            onRunEvaluation={onRunEvaluation}
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SummaryCards({
+  summary,
+  bestNdcgStrategy,
+}: {
+  summary: ReturnType<typeof useEvaluation>['summary'];
+  bestNdcgStrategy: RetrievalStrategy | null;
+}) {
+  const latestNdcg = bestNdcgStrategy ? summary?.latest_averages?.[bestNdcgStrategy]?.ndcg_at_k : undefined;
+  const cards = [
+    ['Consultas', summary?.queries_count ?? 0],
+    ['Juicios', summary?.total_judgments ?? 0],
+    ['Consultas juzgadas', summary?.judged_queries_count ?? 0],
+    ['Mejor NDCG@K', latestNdcg === undefined ? '—' : `${bestNdcgStrategy} ${(latestNdcg * 100).toFixed(1)}%`],
+  ];
+
+  return (
+    <div className="grid grid-cols-4 gap-4">
+      {cards.map(([label, value]) => (
+        <div key={label} className="bg-[#0f1419] border border-[#1a2332] rounded-lg p-4">
+          <p className="text-xs text-slate-500">{label}</p>
+          <p className="mt-2 text-xl font-semibold text-white">{value}</p>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function EvaluationRankings({
+  rankings,
+  judgments,
+  isLoading,
+  onUpdateJudgment,
+}: {
+  rankings: EvaluationRankingsResponse | null;
+  judgments: Record<string, number>;
+  isLoading: boolean;
+  onUpdateJudgment: (chunkId: string, relevance: 0 | 1 | 2 | 3) => void;
+}) {
+  if (isLoading) return <LoadingState label="Ejecutando rankings de evaluación..." />;
+  if (!rankings || Object.keys(rankings.rankings).length === 0) {
+    return (
+      <EmptyState
+        icon={<BarChart3 className="w-8 h-8 text-slate-500" />}
+        title="No hay rankings para esta consulta"
+        text="Ejecuta BM25, Vector, Híbrido o la comparación para generar resultados etiquetables."
+      />
+    );
+  }
+
+  return (
+    <div className="space-y-5">
+      {Object.entries(rankings.rankings).map(([strategy, items]) => (
+        <div key={strategy} className="bg-[#0f1419] border border-[#1a2332] rounded-lg overflow-hidden">
+          <div className="px-5 py-4 bg-[#1a2332] border-b border-[#2d3748] flex items-center justify-between">
+            <div>
+              <h3 className="font-semibold text-white">{strategy.toUpperCase()}</h3>
+              <p className="text-xs text-slate-400">{items.length} fragmentos recuperados</p>
+            </div>
+            <Badge className={getSearchModeColor(strategy as RetrievalStrategy)}>{strategy}</Badge>
+          </div>
+          <div className="divide-y divide-[#1a2332]">
+            {items.map((item, index) => (
+              <EvaluationResultCard
+                key={`${strategy}-${item.chunk_id}`}
+                item={item}
+                rank={index + 1}
+                relevance={judgments[item.chunk_id] ?? item.current_relevance ?? null}
+                onUpdateJudgment={onUpdateJudgment}
+              />
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function EvaluationResultCard({
+  item,
+  rank,
+  relevance,
+  onUpdateJudgment,
+}: {
+  item: EvaluationRankingResult;
+  rank: number;
+  relevance: number | null;
+  onUpdateJudgment: (chunkId: string, relevance: 0 | 1 | 2 | 3) => void;
+}) {
+  return (
+    <div className="p-5">
+      <div className="flex items-start gap-4">
+        <div className="w-10 h-10 bg-[#1a2332] border border-[#2d3748] rounded-lg flex items-center justify-center flex-shrink-0">
+          <span className="font-semibold text-slate-300">#{rank}</span>
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h4 className="font-semibold text-white">{item.title || item.chunk_id}</h4>
+              <p className="text-xs text-slate-500 font-mono mt-1">{item.chunk_id}</p>
+            </div>
+            <select
+              value={relevance ?? ''}
+              onChange={(event) => onUpdateJudgment(item.chunk_id, Number(event.target.value) as 0 | 1 | 2 | 3)}
+              className="bg-[#1a2332] border border-[#2d3748] rounded-md px-3 py-2 text-sm text-slate-200"
+            >
+              <option value="" disabled>Relevancia</option>
+              {([0, 1, 2, 3] as const).map(value => (
+                <option key={value} value={value}>{RELEVANCE_LABELS[value]}</option>
+              ))}
+            </select>
+          </div>
+          {item.url && (
+            <a href={item.url} target="_blank" rel="noopener noreferrer" className="text-sm text-blue-400 hover:text-blue-300 mt-2 inline-block">
+              {item.url}
+            </a>
+          )}
+          {item.text && <p className="text-sm text-slate-400 mt-3">{item.text}</p>}
+          {item.breadcrumb && <p className="text-xs text-slate-500 mt-2 italic">{item.breadcrumb}</p>}
+          <div className="flex items-center gap-4 flex-wrap mt-3">
+            {item.source_id && <span className="text-xs text-slate-500">Fuente: {item.source_id}</span>}
+            {item.score !== null && item.score !== undefined && (
+              <span className="text-xs text-blue-400">Score: {item.score.toFixed(4)}</span>
+            )}
+            {relevance !== null && relevance !== undefined && (
+              <span className="inline-flex items-center gap-1 text-xs text-emerald-400">
+                <CheckCircle2 className="w-3 h-3" />
+                {RELEVANCE_LABELS[relevance as 0 | 1 | 2 | 3]}
+              </span>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function MetricsPanel({
+  report,
+  isRunning,
+  onRunEvaluation,
+}: {
+  report: EvaluationReport | null;
+  isRunning: boolean;
+  onRunEvaluation: () => void;
+}) {
+  const bestByMetric = useMemo(() => {
+    const best: Partial<Record<keyof StrategyMetrics, RetrievalStrategy>> = {};
+    if (!report) return best;
+    for (const metric of METRIC_KEYS) {
+      let bestStrategy: RetrievalStrategy | null = null;
+      let bestValue = -Infinity;
+      for (const strategy of STRATEGIES) {
+        const value = report.strategies[strategy]?.averages?.[metric];
+        if (typeof value === 'number' && value > bestValue) {
+          bestValue = value;
+          bestStrategy = strategy;
+        }
+      }
+      if (bestStrategy) best[metric] = bestStrategy;
+    }
+    return best;
+  }, [report]);
+
+  const bestNdcg = bestByMetric.ndcg_at_k;
+
+  return (
+    <div className="bg-[#0f1419] border border-[#1a2332] rounded-lg overflow-hidden">
+      <div className="px-5 py-4 bg-[#1a2332] border-b border-[#2d3748] flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Star className="w-4 h-4 text-amber-400" />
+          <h2 className="font-semibold text-white">Métricas IR</h2>
+        </div>
+        <Button onClick={onRunEvaluation} disabled={isRunning} className="bg-emerald-600 hover:bg-emerald-700 text-white">
+          Ejecutar evaluación
+        </Button>
+      </div>
+
+      {!report ? (
+        <div className="p-6 text-sm text-slate-400">No hay reporte todavía. Ejecuta la evaluación cuando existan rankings y juicios.</div>
+      ) : (
+        <>
+          <table className="w-full">
+            <thead className="bg-[#121a28] border-b border-[#2d3748]">
+              <tr>
+                <th className="text-left px-4 py-3 text-xs text-slate-400">Strategy</th>
+                <th className="text-left px-4 py-3 text-xs text-slate-400">Precision@K</th>
+                <th className="text-left px-4 py-3 text-xs text-slate-400">Recall@K</th>
+                <th className="text-left px-4 py-3 text-xs text-slate-400">F1@K</th>
+                <th className="text-left px-4 py-3 text-xs text-slate-400">MRR</th>
+                <th className="text-left px-4 py-3 text-xs text-slate-400">NDCG@K</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-[#1a2332]">
+              {STRATEGIES.map(strategy => {
+                const metrics = report.strategies[strategy]?.averages;
+                return (
+                  <tr key={strategy}>
+                    <td className="px-4 py-3 text-sm text-slate-200 uppercase">{strategy}</td>
+                    {METRIC_KEYS.map(metric => (
+                      <td
+                        key={metric}
+                        className={`px-4 py-3 text-sm ${bestByMetric[metric] === strategy ? 'text-emerald-400 font-semibold' : 'text-slate-300'}`}
+                      >
+                        {formatMetric(metrics?.[metric])}
+                      </td>
+                    ))}
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+          <div className="px-5 py-4 bg-[#121a28] border-t border-[#1a2332]">
+            <p className="text-sm text-slate-300">
+              {bestNdcg
+                ? `${bestNdcg.toUpperCase()} obtiene actualmente el mejor NDCG@K; compara este valor con Precision y Recall para decidir el método más estable.`
+                : 'Aún no hay valores suficientes para interpretar el mejor método.'}
+            </p>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+function SearchRunSection({ mode, results, title }: { mode: SearchMode; results: SearchResultItem[]; title?: string }) {
+  return (
+    <div>
+      <div className="mb-4">
+        <h2 className="font-semibold text-white">{title ?? `Resultados ${mode.toUpperCase()}`}</h2>
+        <p className="text-sm text-slate-400 mt-1">
+          {results.length} resultados · <Badge className={getSearchModeColor(mode)}>{mode}</Badge>
+        </p>
+      </div>
+      <div className="space-y-4">
+        {results.map((result) => (
+          <SearchResultCard key={`${mode}-${result.id}`} result={result} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function SearchResultCard({ result }: { result: SearchResultItem }) {
+  return (
+    <div className="bg-[#0f1419] border border-[#1a2332] rounded-lg p-6 hover:border-blue-500/40 transition-all">
+      <div className="flex items-start gap-4">
+        <div className="w-10 h-10 bg-[#1a2332] border border-[#2d3748] rounded-lg flex items-center justify-center flex-shrink-0">
+          <span className="font-semibold text-slate-300">#{result.rank}</span>
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-start justify-between gap-4 mb-2">
+            <h3 className="font-semibold text-white">{result.title}</h3>
+            <div className="flex items-center gap-2">
+              <TrendingUp className="w-4 h-4 text-blue-400" />
+              <span className="font-semibold text-blue-400">{(result.score * 100).toFixed(1)}%</span>
+            </div>
+          </div>
+          {result.url && (
+            <a href={result.url} target="_blank" rel="noopener noreferrer" className="text-sm text-blue-400 hover:text-blue-300 mb-3 inline-block">
+              {result.url}
+            </a>
+          )}
+          {result.text && <p className="text-sm text-slate-400 mb-3">{result.text}</p>}
+          {result.breadcrumb && <p className="text-xs text-slate-500 mb-2 italic">{result.breadcrumb}</p>}
+          <div className="flex items-center gap-3 flex-wrap mt-1">
+            {result.sourceId && (
+              <div className="flex items-center gap-1">
+                <Database className="w-3 h-3 text-slate-500" />
+                <span className="text-xs text-slate-500">{result.sourceId}</span>
+              </div>
+            )}
+            <div className="flex items-center gap-1">
+              <FileText className="w-3 h-3 text-slate-500" />
+              <span className="text-xs text-slate-500 font-mono">fragmento #{result.chunkIndex} · {result.docHash}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CompareTable({ rows }: { rows: ReturnType<typeof useCompareRows> }) {
+  return (
+    <div className="bg-[#0f1419] border border-[#1a2332] rounded-lg overflow-hidden">
+      <div className="px-6 py-4 bg-[#1a2332] border-b border-[#2d3748] flex items-center gap-2">
+        <GitCompare className="w-4 h-4 text-emerald-400" />
+        <h2 className="font-semibold text-white">Comparación de Ranking por Chunk</h2>
+      </div>
+      <table className="w-full">
+        <thead className="bg-[#121a28] border-b border-[#2d3748]">
+          <tr>
+            <th className="text-left px-4 py-3 text-xs text-slate-400">Fuente</th>
+            <th className="text-left px-4 py-3 text-xs text-slate-400">Fragmento</th>
+            <th className="text-left px-4 py-3 text-xs text-slate-400">Doc hash</th>
+            <th className="text-left px-4 py-3 text-xs text-slate-400">Híbrido</th>
+            <th className="text-left px-4 py-3 text-xs text-slate-400">BM25</th>
+            <th className="text-left px-4 py-3 text-xs text-slate-400">Vector</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-[#1a2332]">
+          {rows.map((row) => (
+            <tr key={row.id} title={row.id}>
+              <td className="px-4 py-3 text-xs text-cyan-400 font-mono">{row.source}</td>
+              <td className="px-4 py-3 text-xs text-slate-200 font-mono">#{row.chunkIndex}</td>
+              <td className="px-4 py-3 text-xs text-slate-500 font-mono">{row.docHash}</td>
+              <td className="px-4 py-3 text-sm text-slate-200">{row.hybridRank ?? '—'}</td>
+              <td className="px-4 py-3 text-sm text-slate-200">{row.bm25Rank ?? '—'}</td>
+              <td className="px-4 py-3 text-sm text-slate-200">{row.vectorRank ?? '—'}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function EmptyState({ icon, title, text }: { icon: ReactNode; title: string; text: string }) {
+  return (
+    <div className="text-center py-16">
+      <div className="w-16 h-16 bg-slate-800/50 border border-slate-700 rounded-xl flex items-center justify-center mx-auto mb-4">
+        {icon}
+      </div>
+      <h3 className="font-semibold text-white mb-2">{title}</h3>
+      <p className="text-sm text-slate-400">{text}</p>
+    </div>
+  );
+}
+
+function LoadingState({ label }: { label: string }) {
+  return (
+    <div className="text-center py-16">
+      <div className="inline-block w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mb-4" />
+      <p className="text-sm text-slate-300">{label}</p>
+    </div>
+  );
+}
+
+function ErrorBox({ message }: { message: string }) {
+  return (
+    <div className="mb-6 bg-red-500/10 border border-red-500/30 rounded-lg p-4 flex items-center gap-3">
+      <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0" />
+      <p className="text-sm text-red-300">{message}</p>
+    </div>
+  );
+}
+
+function useCompareRows(runs: ReturnType<typeof useSearch>['runs'], topK: number) {
+  return useMemo(() => {
+    const byMode: Record<SearchMode, { id: string; rank: number; score: number }[]> = {
+      hybrid: [], bm25: [], vector: [],
+    };
+    for (const run of runs) {
+      byMode[run.mode] = run.results.map(result => ({ id: result.id, rank: result.rank, score: result.score }));
+    }
+
+    const ids = new Set<string>();
+    byMode.hybrid.forEach(result => ids.add(result.id));
+    byMode.bm25.forEach(result => ids.add(result.id));
+    byMode.vector.forEach(result => ids.add(result.id));
+
+    return Array.from(ids).slice(0, topK).map((id) => {
+      const hybrid = byMode.hybrid.find(result => result.id === id);
+      const bm25 = byMode.bm25.find(result => result.id === id);
+      const vector = byMode.vector.find(result => result.id === id);
+      const parts = id.split(':');
+      return {
+        id,
+        source: parts[0] ?? id,
+        docHash: parts.length >= 3 ? parts[parts.length - 2] : '',
+        chunkIndex: parts.length >= 3 ? parts[parts.length - 1] : '',
+        hybridRank: hybrid?.rank ?? null,
+        bm25Rank: bm25?.rank ?? null,
+        vectorRank: vector?.rank ?? null,
+      };
+    });
+  }, [runs, topK]);
+}
+
+function useBestStrategy(report: EvaluationReport | null, metric: keyof StrategyMetrics): RetrievalStrategy | null {
+  return useMemo(() => {
+    if (!report) return null;
+    let best: RetrievalStrategy | null = null;
+    let value = -Infinity;
+    for (const strategy of STRATEGIES) {
+      const candidate = report.strategies[strategy]?.averages?.[metric];
+      if (typeof candidate === 'number' && candidate > value) {
+        value = candidate;
+        best = strategy;
+      }
+    }
+    return best;
+  }, [report, metric]);
+}
+
+function getSearchModeColor(mode: ExplorerMode) {
+  switch (mode) {
+    case 'bm25': return 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30';
+    case 'vector': return 'bg-purple-500/20 text-purple-400 border-purple-500/30';
+    case 'hybrid': return 'bg-blue-500/20 text-blue-400 border-blue-500/30';
+    case 'compare': return 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30';
+  }
+}
+
+function formatMetric(value: number | undefined) {
+  return typeof value === 'number' ? value.toFixed(3) : '—';
 }

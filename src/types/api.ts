@@ -41,6 +41,7 @@ export interface RagHistoryResponse {
 export interface SearchRequest {
   query: string;
   top_k?: number;
+  source_ids?: string[];
 }
 
 /** Full chunk metadata — returned by hybrid search */
@@ -150,4 +151,86 @@ export interface UploadResponse {
   filename: string;
   chunks_produced: number;
   chunks_indexed: number;
+}
+
+// ─── Evaluation ──────────────────────────────────────────────────────────────
+
+export type RetrievalStrategy = 'bm25' | 'vector' | 'hybrid';
+
+export interface EvaluationQuery {
+  id: string;
+  query: string;
+  source_ids?: string[] | null;
+}
+
+export interface EvaluationQueryCreateRequest {
+  query: string;
+  source_ids?: string[] | null;
+}
+
+export interface EvaluationRankingRunRequest {
+  top_k: number;
+  strategies: RetrievalStrategy[];
+}
+
+export interface EvaluationRankingResult {
+  chunk_id: string;
+  score?: number | null;
+  source_id?: string | null;
+  url?: string | null;
+  title?: string | null;
+  breadcrumb?: string | null;
+  text?: string | null;
+  current_relevance?: number | null;
+}
+
+export interface EvaluationRankingsResponse {
+  query: EvaluationQuery;
+  top_k: number;
+  rankings: Partial<Record<RetrievalStrategy, EvaluationRankingResult[]>>;
+}
+
+export interface EvaluationJudgmentUpdateRequest {
+  relevance: 0 | 1 | 2 | 3;
+  notes?: string | null;
+}
+
+export interface EvaluationJudgmentResponse {
+  query_id: string;
+  chunk_id: string;
+  relevance: 0 | 1 | 2 | 3;
+}
+
+export interface EvaluationJudgmentsResponse {
+  query_id: string;
+  judgments: Record<string, number>;
+}
+
+export interface StrategyMetrics {
+  precision_at_k: number;
+  recall_at_k: number;
+  f1_at_k: number;
+  reciprocal_rank: number;
+  ndcg_at_k: number;
+}
+
+export interface EvaluationStrategyReport {
+  k: number;
+  evaluated_queries: number;
+  per_query: Record<string, StrategyMetrics>;
+  averages: StrategyMetrics;
+}
+
+export interface EvaluationReport {
+  k: number;
+  strategies: Partial<Record<RetrievalStrategy, EvaluationStrategyReport>>;
+}
+
+export interface EvaluationSummary {
+  queries_count: number;
+  judged_queries_count: number;
+  total_judgments: number;
+  available_strategies: RetrievalStrategy[];
+  latest_report_exists: boolean;
+  latest_averages: Partial<Record<RetrievalStrategy, Partial<StrategyMetrics>>>;
 }
