@@ -123,10 +123,32 @@ export interface PipelineConfig {
   temperature: number;
   model: string;
   reranker_enabled: boolean;
+  reranker_candidate_k: number;
+  context_chunks: number;
+  max_tokens: number;
+  hyde_enabled: boolean;
   llm_base_url: string;
   llm_api_key: string;
   provider: string;
   available_models: string[];
+  insuff: InsuffConfig;
+}
+
+export interface InsuffConfig {
+  confidence_threshold: number;
+  min_results: number;
+  expected_results: number;
+  min_top_score: number;
+  min_relevant_results: number;
+  min_coverage_score: number;
+  min_answerability_score: number;
+  min_source_diversity: number;
+  coverage_top_n: number;
+  w_top: number;
+  w_quantity: number;
+  w_coverage: number;
+  w_diversity: number;
+  w_answerability: number;
 }
 
 // ─── Health ───────────────────────────────────────────────────────────────────
