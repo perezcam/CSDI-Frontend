@@ -285,12 +285,20 @@ export function Settings() {
           <SectionCard
             icon={<ShieldAlert className="w-5 h-5 text-blue-400" />}
             title="Detector de Insuficiencia"
-            tooltip="Estos umbrales definen cuándo el backend considera que la recuperación no alcanza para responder con confianza."
+            tooltip="Estos umbrales definen cuándo la recuperación local se considera insuficiente. Cuando eso ocurre, el sistema puede orientar la consulta hacia búsqueda web."
           >
             <div className="space-y-6">
+              <div className="rounded-lg border border-amber-500/20 bg-amber-500/10 px-4 py-3">
+                <p className="text-sm text-amber-100">
+                  Esta sección controla cómo el sistema decide que la información recuperada no es suficiente.
+                  Cuando el score de insuficiencia supera el umbral configurado, la aplicación puede orientar la respuesta hacia búsqueda web para ampliar cobertura y evidencia.
+                </p>
+              </div>
+
               <div className="grid grid-cols-2 gap-4">
                 <NumberField
                   label="Confidence threshold"
+                  tooltip="Umbral final del score de insuficiencia. Si el sistema supera este valor, considera que la recuperación local no alcanza y puede orientar la respuesta hacia búsqueda web."
                   value={draft?.insuff.confidence_threshold ?? 0.65}
                   min={0}
                   max={1}
@@ -299,6 +307,7 @@ export function Settings() {
                 />
                 <NumberField
                   label="Min top score"
+                  tooltip="Puntaje mínimo esperado para el mejor resultado recuperado. Si el primer resultado cae por debajo de este valor, aumenta la señal de insuficiencia."
                   value={draft?.insuff.min_top_score ?? 0.35}
                   min={0}
                   max={1}
@@ -307,6 +316,7 @@ export function Settings() {
                 />
                 <NumberField
                   label="Min results"
+                  tooltip="Cantidad mínima de resultados recuperados que el sistema espera encontrar antes de considerar que la evidencia es demasiado escasa."
                   value={draft?.insuff.min_results ?? 5}
                   min={1}
                   step={1}
@@ -314,6 +324,7 @@ export function Settings() {
                 />
                 <NumberField
                   label="Expected results"
+                  tooltip="Cantidad ideal de resultados útiles para una consulta. Se usa como referencia para medir cobertura frente a lo que realmente se recuperó."
                   value={draft?.insuff.expected_results ?? 10}
                   min={1}
                   step={1}
@@ -321,6 +332,7 @@ export function Settings() {
                 />
                 <NumberField
                   label="Min relevant results"
+                  tooltip="Cantidad mínima de resultados que deberían parecer realmente relevantes. Si hay menos que esto, el sistema interpreta que la respuesta puede ser insuficiente."
                   value={draft?.insuff.min_relevant_results ?? 2}
                   min={1}
                   step={1}
@@ -328,6 +340,7 @@ export function Settings() {
                 />
                 <NumberField
                   label="Coverage top N"
+                  tooltip="Número de resultados iniciales que se analizan para medir cobertura y diversidad. Define cuántos elementos de la parte alta del ranking se toman en cuenta."
                   value={draft?.insuff.coverage_top_n ?? 5}
                   min={1}
                   step={1}
@@ -335,6 +348,7 @@ export function Settings() {
                 />
                 <NumberField
                   label="Min coverage score"
+                  tooltip="Cobertura mínima aceptable del contexto recuperado. Si el contenido encontrado cubre demasiado poco de la necesidad informativa, sube la señal de insuficiencia."
                   value={draft?.insuff.min_coverage_score ?? 0.2}
                   min={0}
                   max={1}
@@ -343,6 +357,7 @@ export function Settings() {
                 />
                 <NumberField
                   label="Min answerability score"
+                  tooltip="Nivel mínimo de evidencia necesario para que el sistema considere que puede responder con seguridad sin salir a buscar más información."
                   value={draft?.insuff.min_answerability_score ?? 0.4}
                   min={0}
                   max={1}
@@ -351,6 +366,7 @@ export function Settings() {
                 />
                 <NumberField
                   label="Min source diversity"
+                  tooltip="Diversidad mínima de fuentes esperada en los resultados. Si casi todo proviene de un solo origen, el sistema puede considerar que falta amplitud y activar búsqueda web."
                   value={draft?.insuff.min_source_diversity ?? 0.3}
                   min={0}
                   max={1}
@@ -362,8 +378,8 @@ export function Settings() {
               <div className="border-t border-[#1a2332] pt-6">
                 <div className="flex items-center justify-between mb-4">
                   <div>
-                    <h3 className="text-sm font-medium text-white">Pesos del score</h3>
-                    <p className="text-xs text-slate-500 mt-1">El backend valida que esta suma sea exactamente 1.0.</p>
+                    <h3 className="text-sm font-medium text-white">Pesos del score de insuficiencia</h3>
+                    <p className="text-xs text-slate-500 mt-1">Estos pesos determinan qué señales influyen más en la decisión de redirigir la consulta hacia búsqueda web. El backend valida que la suma sea exactamente 1.0.</p>
                   </div>
                   <span className={`text-sm font-semibold ${Math.abs(insuffWeightsTotal - 1) < 1e-4 ? 'text-emerald-400' : 'text-amber-300'}`}>
                     Total {insuffWeightsTotal.toFixed(2)}
@@ -372,6 +388,7 @@ export function Settings() {
                 <div className="grid grid-cols-5 gap-4">
                   <NumberField
                     label="w_top"
+                    tooltip="Peso asignado a la calidad del mejor resultado recuperado dentro del score total de insuficiencia."
                     value={draft?.insuff.w_top ?? 0.1}
                     min={0}
                     max={1}
@@ -380,6 +397,7 @@ export function Settings() {
                   />
                   <NumberField
                     label="w_quantity"
+                    tooltip="Peso asignado a la cantidad de resultados recuperados respecto a la expectativa configurada."
                     value={draft?.insuff.w_quantity ?? 0.15}
                     min={0}
                     max={1}
@@ -388,6 +406,7 @@ export function Settings() {
                   />
                   <NumberField
                     label="w_coverage"
+                    tooltip="Peso asignado a la cobertura del contenido recuperado. Mientras más alto, más influye la falta de cobertura en activar búsqueda web."
                     value={draft?.insuff.w_coverage ?? 0.35}
                     min={0}
                     max={1}
@@ -396,6 +415,7 @@ export function Settings() {
                   />
                   <NumberField
                     label="w_diversity"
+                    tooltip="Peso asignado a la diversidad de fuentes encontradas dentro del score de insuficiencia."
                     value={draft?.insuff.w_diversity ?? 0.15}
                     min={0}
                     max={1}
@@ -404,6 +424,7 @@ export function Settings() {
                   />
                   <NumberField
                     label="w_answerability"
+                    tooltip="Peso asignado a la capacidad estimada de responder la consulta con el contexto local ya recuperado."
                     value={draft?.insuff.w_answerability ?? 0.25}
                     min={0}
                     max={1}
@@ -489,6 +510,7 @@ function TextField({
 
 function NumberField({
   label,
+  tooltip,
   value,
   onChange,
   min,
@@ -497,6 +519,7 @@ function NumberField({
   disabled,
 }: {
   label: string;
+  tooltip?: string;
   value: number;
   onChange: (value: number) => void;
   min?: number;
@@ -506,7 +529,10 @@ function NumberField({
 }) {
   return (
     <div>
-      <Label className="text-sm font-medium text-slate-300 mb-3 block">{label}</Label>
+      <div className="flex items-center mb-3">
+        <Label className="text-sm font-medium text-slate-300">{label}</Label>
+        {tooltip && <InfoTooltip text={tooltip} />}
+      </div>
       <Input
         type="number"
         value={Number.isFinite(value) ? String(value) : ''}
