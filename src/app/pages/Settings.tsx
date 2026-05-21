@@ -1,5 +1,16 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Settings as SettingsIcon, Save, Info, AlertCircle, Loader2 } from 'lucide-react';
+import type { Dispatch, ReactNode, SetStateAction } from 'react';
+import {
+  AlertCircle,
+  Info,
+  Loader2,
+  Save,
+  Settings as SettingsIcon,
+  ShieldAlert,
+  SlidersHorizontal,
+  Sparkles,
+} from 'lucide-react';
+import { toast } from 'sonner';
 import { Slider } from '../components/ui/slider';
 import { Switch } from '../components/ui/switch';
 import { Button } from '../components/ui/button';
@@ -12,48 +23,56 @@ import {
   SelectTrigger,
   SelectValue,
 } from '../components/ui/select';
-import { toast } from 'sonner';
 import { useConfig } from '../../hooks/useConfig';
+import type { InsuffConfig, PipelineConfig, PipelineConfigUpdate } from '../../types/api';
 
 export function Settings() {
   const { config, isLoading, isSaving, error, saveConfig } = useConfig();
-
-  const [bm25Weight, setBm25Weight] = useState([0.3]);
-  const [llmModel, setLlmModel] = useState('llama-3.3-70b-versatile');
-  const [llmBaseUrl, setLlmBaseUrl] = useState('https://api.groq.com/openai/v1');
-  const [llmApiKey, setLlmApiKey] = useState('');
-  const [temperature, setTemperature] = useState([0.1]);
-  const [rerankerEnabled, setRerankerEnabled] = useState(true);
-  const [contextChunks, setContextChunks] = useState([5]);
-  const [candidateK, setCandidateK] = useState([20]);
+  const [draft, setDraft] = useState<PipelineConfigUpdate | null>(null);
 
   useEffect(() => {
     if (!config) return;
-    setBm25Weight([config.bm25_weight]);
-    setLlmModel(config.model);
-    setLlmBaseUrl(config.llm_base_url);
-    setLlmApiKey(config.llm_api_key);
-    setTemperature([config.temperature]);
-    setRerankerEnabled(config.reranker_enabled);
+    setDraft(toPipelineConfigUpdate(config));
   }, [config]);
 
   const modelOptions = useMemo(() => {
-    const set = new Set<string>(config?.available_models ?? []);
-    if (llmModel) set.add(llmModel);
-    return Array.from(set);
-  }, [config?.available_models, llmModel]);
+    const options = new Set<string>(config?.available_models ?? []);
+    if (draft?.model) options.add(draft.model);
+    return Array.from(options);
+  }, [config?.available_models, draft?.model]);
 
-  const vectorWeight = 1 - bm25Weight[0];
+  const vectorWeight = draft ? 1 - draft.bm25_weight : 0;
+  const insuffWeightsTotal = draft
+    ? draft.insuff.w_top
+      + draft.insuff.w_quantity
+      + draft.insuff.w_coverage
+      + draft.insuff.w_diversity
+      + draft.insuff.w_answerability
+    : 0;
 
   const handleSave = async () => {
-    const payload = {
-      bm25_weight: Number(bm25Weight[0].toFixed(2)),
-      vector_weight: Number(vectorWeight.toFixed(2)),
-      temperature: Number(temperature[0].toFixed(2)),
-      model: llmModel,
-      reranker_enabled: rerankerEnabled,
-      llm_base_url: llmBaseUrl.trim(),
-      llm_api_key: llmApiKey.trim(),
+    if (!draft) return;
+
+    const payload: PipelineConfigUpdate = {
+      ...draft,
+      bm25_weight: Number(draft.bm25_weight.toFixed(2)),
+      vector_weight: Number(draft.vector_weight.toFixed(2)),
+      temperature: Number(draft.temperature.toFixed(2)),
+      llm_base_url: draft.llm_base_url.trim(),
+      llm_api_key: draft.llm_api_key.trim(),
+      insuff: {
+        ...draft.insuff,
+        confidence_threshold: Number(draft.insuff.confidence_threshold.toFixed(4)),
+        min_top_score: Number(draft.insuff.min_top_score.toFixed(4)),
+        min_coverage_score: Number(draft.insuff.min_coverage_score.toFixed(4)),
+        min_answerability_score: Number(draft.insuff.min_answerability_score.toFixed(4)),
+        min_source_diversity: Number(draft.insuff.min_source_diversity.toFixed(4)),
+        w_top: Number(draft.insuff.w_top.toFixed(4)),
+        w_quantity: Number(draft.insuff.w_quantity.toFixed(4)),
+        w_coverage: Number(draft.insuff.w_coverage.toFixed(4)),
+        w_diversity: Number(draft.insuff.w_diversity.toFixed(4)),
+        w_answerability: Number(draft.insuff.w_answerability.toFixed(4)),
+      },
     };
 
     try {
@@ -64,26 +83,17 @@ export function Settings() {
     }
   };
 
-  const InfoTooltip = ({ text }: { text: string }) => (
-    <div className="group relative inline-block ml-2">
-      <Info className="w-4 h-4 text-slate-500 cursor-help" />
-      <div className="invisible group-hover:visible absolute left-6 top-0 w-64 bg-[#0f1419] border border-[#2d3748] text-slate-300 text-xs rounded-lg p-3 z-10 shadow-xl">
-        {text}
-      </div>
-    </div>
-  );
-
   return (
     <div className="h-full overflow-y-auto bg-[#0a0e1a]">
       <div className="bg-[#0f1419] border-b border-[#1a2332] px-6 py-4 sticky top-0 z-10">
-        <div className="flex items-center justify-between max-w-4xl mx-auto">
+        <div className="flex items-center justify-between max-w-5xl mx-auto">
           <div>
             <h1 className="font-semibold text-white">Configuración</h1>
-            <p className="text-sm text-slate-400">Ajusta los parámetros del pipeline RAG</p>
+            <p className="text-sm text-slate-400">Administra todos los parámetros persistibles que el backend expone para retrieval, generación y evaluación de insuficiencia.</p>
           </div>
           <Button
             onClick={handleSave}
-            disabled={isLoading || isSaving || !config}
+            disabled={isLoading || isSaving || !draft}
             className="bg-gradient-to-br from-[#2563eb] to-[#1e40af] hover:from-[#1d4ed8] hover:to-[#1e3a8a] text-white shadow-lg shadow-blue-900/30"
           >
             {isSaving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
@@ -93,7 +103,7 @@ export function Settings() {
       </div>
 
       <div className="px-6 py-8">
-        <div className="max-w-4xl mx-auto space-y-6">
+        <div className="max-w-5xl mx-auto space-y-6">
           {error && (
             <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-4 flex items-start gap-3">
               <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
@@ -108,41 +118,49 @@ export function Settings() {
             </div>
           )}
 
-          <div className="bg-[#0f1419] border border-[#1a2332] rounded-lg p-6">
-            <div className="flex items-center gap-2 mb-6">
-              <SettingsIcon className="w-5 h-5 text-blue-400" />
-              <h2 className="font-semibold text-white">Pesos de Búsqueda Híbrida</h2>
-              <InfoTooltip text="Controla el balance entre BM25 y búsqueda semántica vectorial." />
-            </div>
-
+          <SectionCard
+            icon={<SlidersHorizontal className="w-5 h-5 text-blue-400" />}
+            title="Pesos de Búsqueda Híbrida"
+            tooltip="Controla el balance entre BM25 y búsqueda semántica vectorial. El backend exige que ambos pesos sumen 1.0."
+          >
             <div className="space-y-6">
               <div>
                 <div className="flex items-center justify-between mb-3">
                   <Label className="text-sm font-medium text-slate-300">Peso BM25</Label>
-                  <span className="text-sm font-semibold text-blue-400">{(bm25Weight[0] * 100).toFixed(0)}%</span>
+                  <span className="text-sm font-semibold text-blue-400">
+                    {draft ? `${(draft.bm25_weight * 100).toFixed(0)}%` : '—'}
+                  </span>
                 </div>
-                <Slider value={bm25Weight} onValueChange={setBm25Weight} min={0} max={1} step={0.05} className="w-full" />
+                <Slider
+                  value={draft ? [draft.bm25_weight] : [0.3]}
+                  onValueChange={(value) => {
+                    const nextBm25 = Number(value[0].toFixed(2));
+                    setDraft(current => current ? {
+                      ...current,
+                      bm25_weight: nextBm25,
+                      vector_weight: Number((1 - nextBm25).toFixed(2)),
+                    } : current);
+                  }}
+                  min={0}
+                  max={1}
+                  step={0.05}
+                  className="w-full"
+                  disabled={!draft}
+                />
               </div>
 
-              <div>
-                <div className="flex items-center justify-between mb-3">
-                  <Label className="text-sm font-medium text-slate-300">Peso Vectorial</Label>
-                  <span className="text-sm font-semibold text-blue-400">{(vectorWeight * 100).toFixed(0)}%</span>
-                </div>
-                <div className="h-2 bg-[#1a2332] rounded-full overflow-hidden">
-                  <div className="h-full bg-gradient-to-r from-blue-500 to-indigo-500 transition-all" style={{ width: `${vectorWeight * 100}%` }} />
-                </div>
+              <div className="grid grid-cols-2 gap-4">
+                <MetricPill label="BM25" value={`${draft ? (draft.bm25_weight * 100).toFixed(0) : '0'}%`} />
+                <MetricPill label="Vectorial" value={`${(vectorWeight * 100).toFixed(0)}%`} />
               </div>
             </div>
-          </div>
+          </SectionCard>
 
-          <div className="bg-[#0f1419] border border-[#1a2332] rounded-lg p-6">
-            <div className="flex items-center gap-2 mb-6">
-              <SettingsIcon className="w-5 h-5 text-blue-400" />
-              <h2 className="font-semibold text-white">Modelo de Lenguaje</h2>
-              <InfoTooltip text="La lista de modelos viene del proveedor activo (Groq/Ollama/OpenAI/custom)." />
-            </div>
-
+          <SectionCard
+            icon={<Sparkles className="w-5 h-5 text-blue-400" />}
+            title="Modelo de Lenguaje"
+            tooltip="Incluye conexión, modelo, temperatura y límites de salida persistidos por el backend."
+          >
             <div className="space-y-6">
               <div>
                 <Label className="text-sm font-medium text-slate-300 mb-3 block">Proveedor Detectado</Label>
@@ -151,29 +169,28 @@ export function Settings() {
                 </div>
               </div>
 
-              <div>
-                <Label className="text-sm font-medium text-slate-300 mb-3 block">LLM Base URL</Label>
-                <Input
-                  value={llmBaseUrl}
-                  onChange={(e) => setLlmBaseUrl(e.target.value)}
+              <div className="grid grid-cols-2 gap-4">
+                <TextField
+                  label="LLM Base URL"
+                  value={draft?.llm_base_url ?? ''}
+                  onChange={(value) => updateDraft(setDraft, 'llm_base_url', value)}
                   placeholder="https://api.groq.com/openai/v1"
-                  className="w-full bg-[#1a2332] border-[#2d3748] text-white"
                 />
-              </div>
-
-              <div>
-                <Label className="text-sm font-medium text-slate-300 mb-3 block">LLM API Key</Label>
-                <Input
-                  value={llmApiKey}
-                  onChange={(e) => setLlmApiKey(e.target.value)}
+                <TextField
+                  label="LLM API Key"
+                  value={draft?.llm_api_key ?? ''}
+                  onChange={(value) => updateDraft(setDraft, 'llm_api_key', value)}
                   placeholder="gsk_..."
-                  className="w-full bg-[#1a2332] border-[#2d3748] text-white"
                 />
               </div>
 
               <div>
                 <Label className="text-sm font-medium text-slate-300 mb-3 block">Selección de Modelo</Label>
-                <Select value={llmModel} onValueChange={setLlmModel}>
+                <Select
+                  value={draft?.model ?? ''}
+                  onValueChange={(value) => updateDraft(setDraft, 'model', value)}
+                  disabled={!draft}
+                >
                   <SelectTrigger className="w-full bg-[#1a2332] border-[#2d3748] text-white">
                     <SelectValue />
                   </SelectTrigger>
@@ -185,62 +202,373 @@ export function Settings() {
                 </Select>
                 {modelOptions.length === 0 && (
                   <p className="text-xs text-slate-500 mt-2">
-                    No hay catálogo para este proveedor. Escribe base URL/API key y guarda.
+                    No hay catálogo local para este proveedor. Puedes escribir el endpoint y guardar con el nombre de modelo deseado.
                   </p>
                 )}
               </div>
 
-              <div>
-                <div className="flex items-center justify-between mb-3">
-                  <Label className="text-sm font-medium text-slate-300">Temperatura</Label>
-                  <span className="text-sm font-semibold text-blue-400">{temperature[0].toFixed(2)}</span>
-                </div>
-                <Slider value={temperature} onValueChange={setTemperature} min={0} max={1} step={0.05} className="w-full" />
-                <div className="flex justify-between mt-2">
-                  <span className="text-xs text-slate-500">Más Preciso</span>
-                  <span className="text-xs text-slate-500">Más Creativo</span>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-[#0f1419] border border-[#1a2332] rounded-lg p-6">
-            <div className="flex items-center gap-2 mb-6">
-              <SettingsIcon className="w-5 h-5 text-blue-400" />
-              <h2 className="font-semibold text-white">Configuración de Retrieval</h2>
-              <InfoTooltip text="Reranker se persiste en backend. contextChunks y candidateK son visuales por ahora." />
-            </div>
-
-            <div className="space-y-6">
-              <div className="flex items-center justify-between p-4 bg-[#1a2332] border border-[#2d3748] rounded-lg">
-                <div>
-                  <Label className="text-sm font-medium text-white">Habilitar Reranker</Label>
-                  <p className="text-xs text-slate-500 mt-1">Usar modelo de reranking para refinar resultados</p>
-                </div>
-                <Switch checked={rerankerEnabled} onCheckedChange={setRerankerEnabled} />
-              </div>
-
-              <div>
-                <div className="flex items-center justify-between mb-3">
-                  <Label className="text-sm font-medium text-slate-300">Chunks de Contexto LLM</Label>
-                  <span className="text-sm font-semibold text-blue-400">{contextChunks[0]} chunks</span>
-                </div>
-                <Slider value={contextChunks} onValueChange={setContextChunks} min={1} max={10} step={1} className="w-full" />
-              </div>
-
-              {rerankerEnabled && (
+              <div className="grid grid-cols-2 gap-4">
                 <div>
                   <div className="flex items-center justify-between mb-3">
-                    <Label className="text-sm font-medium text-slate-300">Pool de Candidatos Reranker</Label>
-                    <span className="text-sm font-semibold text-blue-400">{candidateK[0]} candidatos</span>
+                    <Label className="text-sm font-medium text-slate-300">Temperatura</Label>
+                    <span className="text-sm font-semibold text-blue-400">{draft?.temperature.toFixed(2) ?? '—'}</span>
                   </div>
-                  <Slider value={candidateK} onValueChange={setCandidateK} min={5} max={50} step={5} className="w-full" />
+                  <Slider
+                    value={draft ? [draft.temperature] : [0.1]}
+                    onValueChange={(value) => updateDraft(setDraft, 'temperature', Number(value[0].toFixed(2)))}
+                    min={0}
+                    max={2}
+                    step={0.05}
+                    className="w-full"
+                    disabled={!draft}
+                  />
                 </div>
-              )}
+                <NumberField
+                  label="Max Tokens"
+                  value={draft?.max_tokens ?? 1024}
+                  min={64}
+                  max={8192}
+                  step={64}
+                  onChange={(value) => updateDraft(setDraft, 'max_tokens', value)}
+                />
+              </div>
             </div>
-          </div>
+          </SectionCard>
+
+          <SectionCard
+            icon={<SettingsIcon className="w-5 h-5 text-blue-400" />}
+            title="Retrieval y RAG"
+            tooltip="Controles operativos del pipeline de recuperación y generación que hoy soporta el backend."
+          >
+            <div className="space-y-6">
+              <ToggleRow
+                title="Habilitar Reranker"
+                description="Activa el reordenamiento con cross-encoder antes de generar la respuesta."
+                checked={draft?.reranker_enabled ?? false}
+                onCheckedChange={(checked) => updateDraft(setDraft, 'reranker_enabled', checked)}
+              />
+
+              <ToggleRow
+                title="Habilitar HyDE"
+                description="Activa la expansión hipotética de la consulta para retrieval semántico."
+                checked={draft?.hyde_enabled ?? false}
+                onCheckedChange={(checked) => updateDraft(setDraft, 'hyde_enabled', checked)}
+              />
+
+              <div className="grid grid-cols-3 gap-4">
+                <NumberField
+                  label="Chunks de contexto"
+                  value={draft?.context_chunks ?? 15}
+                  min={1}
+                  max={50}
+                  step={1}
+                  onChange={(value) => updateDraft(setDraft, 'context_chunks', value)}
+                />
+                <NumberField
+                  label="Candidate K reranker"
+                  value={draft?.reranker_candidate_k ?? 30}
+                  min={1}
+                  max={200}
+                  step={1}
+                  onChange={(value) => updateDraft(setDraft, 'reranker_candidate_k', value)}
+                />
+                <NumberField
+                  label="Peso vectorial"
+                  value={draft?.vector_weight ?? 0.7}
+                  disabled
+                  onChange={() => undefined}
+                />
+              </div>
+            </div>
+          </SectionCard>
+
+          <SectionCard
+            icon={<ShieldAlert className="w-5 h-5 text-blue-400" />}
+            title="Detector de Insuficiencia"
+            tooltip="Estos umbrales definen cuándo el backend considera que la recuperación no alcanza para responder con confianza."
+          >
+            <div className="space-y-6">
+              <div className="grid grid-cols-2 gap-4">
+                <NumberField
+                  label="Confidence threshold"
+                  value={draft?.insuff.confidence_threshold ?? 0.65}
+                  min={0}
+                  max={1}
+                  step={0.01}
+                  onChange={(value) => updateInsuff(setDraft, 'confidence_threshold', value)}
+                />
+                <NumberField
+                  label="Min top score"
+                  value={draft?.insuff.min_top_score ?? 0.35}
+                  min={0}
+                  max={1}
+                  step={0.01}
+                  onChange={(value) => updateInsuff(setDraft, 'min_top_score', value)}
+                />
+                <NumberField
+                  label="Min results"
+                  value={draft?.insuff.min_results ?? 5}
+                  min={1}
+                  step={1}
+                  onChange={(value) => updateInsuff(setDraft, 'min_results', value)}
+                />
+                <NumberField
+                  label="Expected results"
+                  value={draft?.insuff.expected_results ?? 10}
+                  min={1}
+                  step={1}
+                  onChange={(value) => updateInsuff(setDraft, 'expected_results', value)}
+                />
+                <NumberField
+                  label="Min relevant results"
+                  value={draft?.insuff.min_relevant_results ?? 2}
+                  min={1}
+                  step={1}
+                  onChange={(value) => updateInsuff(setDraft, 'min_relevant_results', value)}
+                />
+                <NumberField
+                  label="Coverage top N"
+                  value={draft?.insuff.coverage_top_n ?? 5}
+                  min={1}
+                  step={1}
+                  onChange={(value) => updateInsuff(setDraft, 'coverage_top_n', value)}
+                />
+                <NumberField
+                  label="Min coverage score"
+                  value={draft?.insuff.min_coverage_score ?? 0.2}
+                  min={0}
+                  max={1}
+                  step={0.01}
+                  onChange={(value) => updateInsuff(setDraft, 'min_coverage_score', value)}
+                />
+                <NumberField
+                  label="Min answerability score"
+                  value={draft?.insuff.min_answerability_score ?? 0.4}
+                  min={0}
+                  max={1}
+                  step={0.01}
+                  onChange={(value) => updateInsuff(setDraft, 'min_answerability_score', value)}
+                />
+                <NumberField
+                  label="Min source diversity"
+                  value={draft?.insuff.min_source_diversity ?? 0.3}
+                  min={0}
+                  max={1}
+                  step={0.01}
+                  onChange={(value) => updateInsuff(setDraft, 'min_source_diversity', value)}
+                />
+              </div>
+
+              <div className="border-t border-[#1a2332] pt-6">
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h3 className="text-sm font-medium text-white">Pesos del score</h3>
+                    <p className="text-xs text-slate-500 mt-1">El backend valida que esta suma sea exactamente 1.0.</p>
+                  </div>
+                  <span className={`text-sm font-semibold ${Math.abs(insuffWeightsTotal - 1) < 1e-4 ? 'text-emerald-400' : 'text-amber-300'}`}>
+                    Total {insuffWeightsTotal.toFixed(2)}
+                  </span>
+                </div>
+                <div className="grid grid-cols-5 gap-4">
+                  <NumberField
+                    label="w_top"
+                    value={draft?.insuff.w_top ?? 0.1}
+                    min={0}
+                    max={1}
+                    step={0.01}
+                    onChange={(value) => updateInsuff(setDraft, 'w_top', value)}
+                  />
+                  <NumberField
+                    label="w_quantity"
+                    value={draft?.insuff.w_quantity ?? 0.15}
+                    min={0}
+                    max={1}
+                    step={0.01}
+                    onChange={(value) => updateInsuff(setDraft, 'w_quantity', value)}
+                  />
+                  <NumberField
+                    label="w_coverage"
+                    value={draft?.insuff.w_coverage ?? 0.35}
+                    min={0}
+                    max={1}
+                    step={0.01}
+                    onChange={(value) => updateInsuff(setDraft, 'w_coverage', value)}
+                  />
+                  <NumberField
+                    label="w_diversity"
+                    value={draft?.insuff.w_diversity ?? 0.15}
+                    min={0}
+                    max={1}
+                    step={0.01}
+                    onChange={(value) => updateInsuff(setDraft, 'w_diversity', value)}
+                  />
+                  <NumberField
+                    label="w_answerability"
+                    value={draft?.insuff.w_answerability ?? 0.25}
+                    min={0}
+                    max={1}
+                    step={0.01}
+                    onChange={(value) => updateInsuff(setDraft, 'w_answerability', value)}
+                  />
+                </div>
+              </div>
+            </div>
+          </SectionCard>
         </div>
       </div>
     </div>
   );
+}
+
+function SectionCard({
+  icon,
+  title,
+  tooltip,
+  children,
+}: {
+  icon: ReactNode;
+  title: string;
+  tooltip: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className="bg-[#0f1419] border border-[#1a2332] rounded-lg p-6">
+      <div className="flex items-center gap-2 mb-6">
+        {icon}
+        <h2 className="font-semibold text-white">{title}</h2>
+        <InfoTooltip text={tooltip} />
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function InfoTooltip({ text }: { text: string }) {
+  return (
+    <div className="group relative inline-block ml-2">
+      <Info className="w-4 h-4 text-slate-500 cursor-help" />
+      <div className="invisible group-hover:visible absolute left-6 top-0 w-64 bg-[#0f1419] border border-[#2d3748] text-slate-300 text-xs rounded-lg p-3 z-10 shadow-xl">
+        {text}
+      </div>
+    </div>
+  );
+}
+
+function MetricPill({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="bg-[#1a2332] border border-[#2d3748] rounded-lg px-4 py-3">
+      <p className="text-xs text-slate-500">{label}</p>
+      <p className="mt-1 text-base font-semibold text-white">{value}</p>
+    </div>
+  );
+}
+
+function TextField({
+  label,
+  value,
+  onChange,
+  placeholder,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  placeholder?: string;
+}) {
+  return (
+    <div>
+      <Label className="text-sm font-medium text-slate-300 mb-3 block">{label}</Label>
+      <Input
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        placeholder={placeholder}
+        className="w-full bg-[#1a2332] border-[#2d3748] text-white"
+      />
+    </div>
+  );
+}
+
+function NumberField({
+  label,
+  value,
+  onChange,
+  min,
+  max,
+  step,
+  disabled,
+}: {
+  label: string;
+  value: number;
+  onChange: (value: number) => void;
+  min?: number;
+  max?: number;
+  step?: number;
+  disabled?: boolean;
+}) {
+  return (
+    <div>
+      <Label className="text-sm font-medium text-slate-300 mb-3 block">{label}</Label>
+      <Input
+        type="number"
+        value={Number.isFinite(value) ? String(value) : ''}
+        onChange={(event) => {
+          const nextValue = event.target.valueAsNumber;
+          if (!Number.isNaN(nextValue)) onChange(nextValue);
+        }}
+        min={min}
+        max={max}
+        step={step}
+        disabled={disabled}
+        className="w-full bg-[#1a2332] border-[#2d3748] text-white"
+      />
+    </div>
+  );
+}
+
+function ToggleRow({
+  title,
+  description,
+  checked,
+  onCheckedChange,
+}: {
+  title: string;
+  description: string;
+  checked: boolean;
+  onCheckedChange: (checked: boolean) => void;
+}) {
+  return (
+    <div className="flex items-center justify-between p-4 bg-[#1a2332] border border-[#2d3748] rounded-lg">
+      <div>
+        <Label className="text-sm font-medium text-white">{title}</Label>
+        <p className="text-xs text-slate-500 mt-1">{description}</p>
+      </div>
+      <Switch checked={checked} onCheckedChange={onCheckedChange} />
+    </div>
+  );
+}
+
+function toPipelineConfigUpdate(config: PipelineConfig): PipelineConfigUpdate {
+  const { provider: _provider, available_models: _availableModels, ...rest } = config;
+  return rest;
+}
+
+function updateDraft<K extends keyof PipelineConfigUpdate>(
+  setDraft: Dispatch<SetStateAction<PipelineConfigUpdate | null>>,
+  key: K,
+  value: PipelineConfigUpdate[K],
+) {
+  setDraft(current => current ? { ...current, [key]: value } : current);
+}
+
+function updateInsuff<K extends keyof InsuffConfig>(
+  setDraft: Dispatch<SetStateAction<PipelineConfigUpdate | null>>,
+  key: K,
+  value: InsuffConfig[K],
+) {
+  setDraft(current => current ? {
+    ...current,
+    insuff: {
+      ...current.insuff,
+      [key]: value,
+    },
+  } : current);
 }
