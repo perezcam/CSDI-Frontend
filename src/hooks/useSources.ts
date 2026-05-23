@@ -148,6 +148,30 @@ export function useSources() {
     };
   }, [fetchSources]);
 
+  const deindex = useCallback(async (sourceId: string) => {
+    setSources(prev =>
+      prev.map(s =>
+        s.source_id === sourceId
+          ? { ...s, ingestStatus: 'idle' as IngestStatus, progressPct: 0, indexed_chunks: 0, lastIngest: undefined }
+          : s,
+      ),
+    );
+    try {
+      await sourcesService.deindex(sourceId);
+      // For user sources the entry is fully removed — refresh the full list
+      const latest = await sourcesService.list();
+      setSources(latest.map(s => ({
+        ...s,
+        ingestStatus: deriveStatus(s, getPersistedIngesting()),
+        progressPct: s.progress_pct ?? 0,
+        lastIngest: s.last_ingest_at ? new Date(s.last_ingest_at) : undefined,
+      })));
+    } catch {
+      // Revert optimistic update on failure
+      fetchSources();
+    }
+  }, [fetchSources]);
+
   const ingest = useCallback(async (sourceId: string) => {
     setSources(prev =>
       prev.map(s =>
@@ -192,5 +216,5 @@ export function useSources() {
     }
   }, [startPolling, stopPolling]);
 
-  return { sources, isLoading, error, ingest, refetch: fetchSources };
+  return { sources, isLoading, error, ingest, deindex, refetch: fetchSources };
 }

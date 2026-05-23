@@ -1,8 +1,18 @@
 import { useState, useEffect } from 'react';
-import { RefreshCw, CheckCircle2, AlertCircle, Loader2, FileText, Package, Globe, BookOpen, User, Files } from 'lucide-react';
+import { RefreshCw, CheckCircle2, AlertCircle, Loader2, FileText, Package, Globe, BookOpen, User, Files, Trash2 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
 import { Input } from '../components/ui/input';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '../components/ui/alert-dialog';
 import { useSources, type IngestStatus } from '../../hooks/useSources';
 import { metricsService } from '../../services/metrics.service';
 
@@ -64,98 +74,141 @@ const getStatusBadge = (status: IngestStatus, pct: number) => {
 interface SourcesTableProps {
   sources: ReturnType<typeof useSources>['sources'];
   ingest: (id: string) => void;
+  deindex: (id: string) => void;
   isIngesting: (status: IngestStatus) => boolean;
   hideIngestAction?: boolean;
 }
 
-function SourcesTable({ sources, ingest, isIngesting, hideIngestAction }: SourcesTableProps) {
+function SourcesTable({ sources, ingest, deindex, isIngesting, hideIngestAction }: SourcesTableProps) {
+  const [confirmingId, setConfirmingId] = useState<string | null>(null);
+
+  const confirmingSource = sources.find(s => s.source_id === confirmingId);
+
   return (
-    <table className="w-full">
-      <thead className="bg-[#1a2332] border-b border-[#2d3748]">
-        <tr>
-          <th className="text-left px-6 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider">Fuente</th>
-          <th className="text-left px-6 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider">Tipo</th>
-          <th className="text-left px-6 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider">URL Base</th>
-          <th className="text-left px-6 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider">Estado</th>
-          <th className="text-left px-6 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider">Chunks</th>
-          <th className="text-left px-6 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider">Última Ingestión</th>
-          {!hideIngestAction && (
+    <>
+      <table className="w-full">
+        <thead className="bg-[#1a2332] border-b border-[#2d3748]">
+          <tr>
+            <th className="text-left px-6 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider">Fuente</th>
+            <th className="text-left px-6 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider">Tipo</th>
+            <th className="text-left px-6 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider">URL Base</th>
+            <th className="text-left px-6 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider">Estado</th>
+            <th className="text-left px-6 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider">Chunks</th>
+            <th className="text-left px-6 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider">Última Ingestión</th>
             <th className="text-right px-6 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider">Acciones</th>
-          )}
-        </tr>
-      </thead>
-      <tbody className="divide-y divide-[#1a2332]">
-        {sources.map((source) => (
-          <tr key={source.source_id} className="hover:bg-[#1a2332]/50 transition-colors">
-            <td className="px-6 py-4">
-              <div className="flex items-center gap-3">
-                {getStatusIcon(source.ingestStatus)}
-                <div>
-                  <p className="font-medium text-white">{source.source_id}</p>
-                  <p className="text-xs text-slate-500">{source.name}</p>
-                </div>
-              </div>
-            </td>
-            <td className="px-6 py-4">
-              {getSourceTypeBadge(source.source_kind)}
-            </td>
-            <td className="px-6 py-4">
-              {source.base_url.startsWith('http') ? (
-                <a
-                  href={source.base_url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300"
-                >
-                  <Globe className="w-3 h-3" />
-                  <span className="truncate max-w-[200px]">{source.base_url}</span>
-                </a>
-              ) : (
-                <span className="text-xs text-slate-400">{source.base_url}</span>
-              )}
-            </td>
-            <td className="px-6 py-4">
-              {getStatusBadge(source.ingestStatus, source.progressPct ?? 0)}
-            </td>
-            <td className="px-6 py-4 text-slate-300 text-sm">
-              {source.indexed_chunks.toLocaleString()}
-            </td>
-            <td className="px-6 py-4 text-slate-400 text-sm">
-              {source.lastIngest
-                ? source.lastIngest.toLocaleString('es-ES', {
-                    year: 'numeric',
-                    month: 'short',
-                    day: 'numeric',
-                    hour: '2-digit',
-                    minute: '2-digit',
-                  })
-                : '—'}
-            </td>
-            {!hideIngestAction && (
-              <td className="px-6 py-4 text-right">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => ingest(source.source_id)}
-                  disabled={isIngesting(source.ingestStatus)}
-                  className="bg-[#1a2332] border-[#2d3748] text-slate-300 hover:bg-[#1f2937] hover:text-white"
-                >
-                  <RefreshCw
-                    className={`w-4 h-4 mr-2 ${isIngesting(source.ingestStatus) ? 'animate-spin' : ''}`}
-                  />
-                  Ingerir
-                </Button>
-              </td>
-            )}
           </tr>
-        ))}
-      </tbody>
-    </table>
+        </thead>
+        <tbody className="divide-y divide-[#1a2332]">
+          {sources.map((source) => (
+            <tr key={source.source_id} className="hover:bg-[#1a2332]/50 transition-colors">
+              <td className="px-6 py-4">
+                <div className="flex items-center gap-3">
+                  {getStatusIcon(source.ingestStatus)}
+                  <div>
+                    <p className="font-medium text-white">{source.source_id}</p>
+                    <p className="text-xs text-slate-500">{source.name}</p>
+                  </div>
+                </div>
+              </td>
+              <td className="px-6 py-4">
+                {getSourceTypeBadge(source.source_kind)}
+              </td>
+              <td className="px-6 py-4">
+                {source.base_url.startsWith('http') ? (
+                  <a
+                    href={source.base_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300"
+                  >
+                    <Globe className="w-3 h-3" />
+                    <span className="truncate max-w-[200px]">{source.base_url}</span>
+                  </a>
+                ) : (
+                  <span className="text-xs text-slate-400">{source.base_url}</span>
+                )}
+              </td>
+              <td className="px-6 py-4">
+                {getStatusBadge(source.ingestStatus, source.progressPct ?? 0)}
+              </td>
+              <td className="px-6 py-4 text-slate-300 text-sm">
+                {source.indexed_chunks.toLocaleString()}
+              </td>
+              <td className="px-6 py-4 text-slate-400 text-sm">
+                {source.lastIngest
+                  ? source.lastIngest.toLocaleString('es-ES', {
+                      year: 'numeric',
+                      month: 'short',
+                      day: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    })
+                  : '—'}
+              </td>
+              <td className="px-6 py-4">
+                <div className="flex items-center justify-end gap-2">
+                  {!hideIngestAction && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => ingest(source.source_id)}
+                      disabled={isIngesting(source.ingestStatus)}
+                      className="bg-[#1a2332] border-[#2d3748] text-slate-300 hover:bg-[#1f2937] hover:text-white"
+                    >
+                      <RefreshCw
+                        className={`w-4 h-4 mr-2 ${isIngesting(source.ingestStatus) ? 'animate-spin' : ''}`}
+                      />
+                      Ingerir
+                    </Button>
+                  )}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setConfirmingId(source.source_id)}
+                    disabled={isIngesting(source.ingestStatus) || source.indexed_chunks === 0}
+                    className="bg-[#1a2332] border-[#2d3748] text-slate-400 hover:bg-red-500/10 hover:border-red-500/40 hover:text-red-400 disabled:opacity-30"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </Button>
+                </div>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+
+      <AlertDialog open={confirmingId !== null} onOpenChange={(open) => { if (!open) setConfirmingId(null); }}>
+        <AlertDialogContent className="bg-[#0f1419] border-[#2d3748] text-white">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-white">¿Eliminar datos de esta fuente?</AlertDialogTitle>
+            <AlertDialogDescription className="text-slate-400">
+              Se eliminarán todos los chunks, vectores y documentos de{' '}
+              <span className="text-white font-medium">{confirmingSource?.name ?? confirmingId}</span>.
+              Esta acción no se puede deshacer.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel
+              onClick={() => setConfirmingId(null)}
+              className="bg-[#1a2332] border-[#2d3748] text-slate-300 hover:bg-[#1f2937] hover:text-white"
+            >
+              Cancelar
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => { deindex(confirmingId!); setConfirmingId(null); }}
+              className="bg-red-600 hover:bg-red-700 text-white border-0"
+            >
+              Eliminar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   );
 }
 
 export function Sources() {
-  const { sources, isLoading, error, ingest, refetch } = useSources();
+  const { sources, isLoading, error, ingest, deindex, refetch } = useSources();
   const [searchTerm, setSearchTerm] = useState('');
   const [docCount, setDocCount] = useState<number | null>(null);
 
@@ -288,6 +341,7 @@ export function Sources() {
                     <SourcesTable
                       sources={corpusSources}
                       ingest={ingest}
+                      deindex={deindex}
                       isIngesting={isIngesting}
                     />
                   ) : (
@@ -314,6 +368,7 @@ export function Sources() {
                     <SourcesTable
                       sources={userSources}
                       ingest={ingest}
+                      deindex={deindex}
                       isIngesting={isIngesting}
                       hideIngestAction
                     />
