@@ -403,3 +403,30 @@ export interface QueryFeedbackByQueryResponse {
   normalized_query: string;
   items: QueryFeedbackItemResponse[];
 }
+
+export type QueryFeedbackComparisonMode = 'none' | 'expanded' | 'feedback';
+
+export type QueryFeedbackPreference = 'prefer_a' | 'prefer_b' | 'both' | 'neither';
+
+export interface QueryFeedbackComparableResult {
+  chunk_id: string;
+  score: number;
+  original_score?: number;
+  adjusted_score?: number;
+  feedback_applied?: boolean;
+  feedback_relevance?: QueryFeedbackRelevance | null;
+  feedback_match_type?: 'exact' | 'semantic' | null;
+  source_id: string;
+  url: string;
+  title: string;
+  breadcrumb: string;
+  text: string;
+}
+
+export interface QueryFeedbackComparisonOption {
+  id: 'A' | 'B';
+  label: string;
+  description: string;
+  strategy: 'standard' | 'expanded' | 'feedback';
+  results: QueryFeedbackComparableResult[];
+}
