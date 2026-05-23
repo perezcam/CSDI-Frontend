@@ -4,6 +4,8 @@ import ReactMarkdown from 'react-markdown';
 import { useChatContext } from '../context/chat-context';
 import { Button } from '../components/ui/button';
 import { Textarea } from '../components/ui/textarea';
+import { Badge } from '../components/ui/badge';
+import { getSourceTypeLabel } from '../../lib/sourceType';
 
 export function Chat() {
   const [input, setInput] = useState('');
@@ -18,6 +20,17 @@ export function Chat() {
   const currentSources = messages.length > 0
     ? (messages[messages.length - 1].sources ?? [])
     : [];
+
+  const renderSourceTypeBadge = (sourceType?: string) => {
+    const label = getSourceTypeLabel(sourceType);
+    if (!label) return null;
+
+    return (
+      <Badge className="mb-2 bg-emerald-500/15 text-emerald-300 border-emerald-500/30">
+        Fuente: {label}
+      </Badge>
+    );
+  };
 
   return (
     <div className="h-full flex">
@@ -130,6 +143,7 @@ export function Chat() {
                 key={source.chunk_id}
                 className="bg-[#1a2332] border border-[#2d3748] rounded-lg p-4 hover:border-blue-500/30 transition-colors"
               >
+                {renderSourceTypeBadge(source.source_type)}
                 <h3 className="font-medium text-sm text-white line-clamp-2 mb-2">
                   {source.title}
                 </h3>

@@ -22,6 +22,7 @@ import { Slider } from '../components/ui/slider';
 import { Badge } from '../components/ui/badge';
 import { useSearch, type SearchMode, type SearchResultItem } from '../../hooks/useSearch';
 import { useEvaluation } from '../../hooks/useEvaluation';
+import { getSourceTypeLabel } from '../../lib/sourceType';
 import type {
   EvaluationRankingResult,
   EvaluationRankingsResponse,
@@ -1025,7 +1026,10 @@ function SearchResultCard({ result }: { result: SearchResultItem }) {
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-start justify-between gap-4 mb-2">
-            <h3 className="font-semibold text-white min-w-0">{result.title}</h3>
+            <div className="flex flex-wrap items-center gap-2 min-w-0">
+              <h3 className="font-semibold text-white min-w-0">{result.title}</h3>
+              <SourceTypeBadge sourceType={result.sourceType} />
+            </div>
             <div className="flex items-center gap-2 flex-shrink-0">
               <button
                 type="button"
@@ -1067,6 +1071,17 @@ function SearchResultCard({ result }: { result: SearchResultItem }) {
         </div>
       </div>
     </div>
+  );
+}
+
+function SourceTypeBadge({ sourceType }: { sourceType?: string }) {
+  const label = getSourceTypeLabel(sourceType);
+  if (!label) return null;
+
+  return (
+    <Badge className="bg-emerald-500/15 text-emerald-300 border-emerald-500/30">
+      Fuente: {label}
+    </Badge>
   );
 }
 
