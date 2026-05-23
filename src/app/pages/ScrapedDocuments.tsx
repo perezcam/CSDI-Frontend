@@ -6,7 +6,6 @@ import {
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
-  Database,
   ExternalLink,
   FileText,
   Globe,
