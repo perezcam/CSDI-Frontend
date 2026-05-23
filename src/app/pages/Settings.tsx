@@ -253,13 +253,22 @@ export function Settings() {
 
               <ToggleRow
                 title="Habilitar HyDE"
-                description="Activa la expansión hipotética de la consulta para retrieval semántico."
+                description="Activa HyDE: genera una hipótesis con el LLM para enriquecer la búsqueda semántica."
                 checked={draft?.hyde_enabled ?? false}
                 onCheckedChange={(checked) => updateDraft(setDraft, 'hyde_enabled', checked)}
               />
 
               <div className="rounded-lg border border-[#2d3748] bg-[#1a2332] p-4">
-                <div className="flex items-start justify-between gap-4 mb-4">
+                <div className="mb-4">
+                  <h3 className="text-sm font-medium text-white">Retroalimentación de búsqueda</h3>
+                  <p className="text-xs text-slate-500 mt-1 max-w-2xl">
+                    Controla la frecuencia del flujo A/B que recopila preferencias del usuario y
+                    permite reutilizar feedback histórico en búsquedas futuras. No modifica la
+                    configuración de HyDE.
+                  </p>
+                </div>
+
+                <div className="flex items-start justify-between gap-4 mb-3">
                   <div>
                     <Label className="text-sm font-medium text-white">
                       Probabilidad de comparación A/B
@@ -292,10 +301,8 @@ export function Settings() {
                   className="w-full"
                 />
 
-                <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500">
-                  <span>0%: nunca</span>
-                  <span>25%: ocasional</span>
-                  <span>100%: siempre / demo</span>
+                <div className="mt-3 text-xs text-slate-500">
+                  0% nunca · 25% ocasional · 100% siempre/demo
                 </div>
               </div>
 
