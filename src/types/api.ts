@@ -147,6 +147,40 @@ export interface IngestProgressResponse {
   error: string | null;
 }
 
+export interface ScrapedDocument {
+  document_id: string;
+  source_id: string;
+  url: string;
+  title: string;
+  breadcrumb: string;
+  content_type: string;
+  http_status: number;
+  crawl_depth: number | null;
+  fetched_at: string | null;
+  last_seen_at: string | null;
+  published_at: string | null;
+  document_updated_at: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+  is_active: boolean;
+  text_preview: string;
+}
+
+export interface ScrapedDocumentsQueryParams {
+  page?: number;
+  page_size?: number;
+  source_id?: string | null;
+  active_only?: boolean;
+}
+
+export interface ScrapedDocumentsResponse {
+  page: number;
+  page_size: number;
+  total: number;
+  total_pages: number;
+  items: ScrapedDocument[];
+}
+
 export interface PipelineConfig {
   bm25_weight: number;
   vector_weight: number;

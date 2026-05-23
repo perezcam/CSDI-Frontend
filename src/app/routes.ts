@@ -3,6 +3,7 @@ import { Layout } from "./components/Layout";
 import { Chat } from "./pages/Chat";
 import { Search } from "./pages/Search";
 import { Sources } from "./pages/Sources";
+import { ScrapedDocuments } from "./pages/ScrapedDocuments";
 import { Knowledge } from "./pages/Knowledge";
 import { Dashboard } from "./pages/Dashboard";
 import { Settings } from "./pages/Settings";
@@ -15,6 +16,7 @@ export const router = createBrowserRouter([
       { index: true, Component: Chat },
       { path: "search", Component: Search },
       { path: "sources", Component: Sources },
+      { path: "documents", Component: ScrapedDocuments },
       { path: "knowledge", Component: Knowledge },
       { path: "dashboard", Component: Dashboard },
       { path: "settings", Component: Settings },
