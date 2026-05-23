@@ -1,5 +1,5 @@
 import { Link, Outlet, useLocation } from 'react-router';
-import { MessageSquare, Search, Database, FolderOpen, LayoutDashboard, Settings, Sparkles } from 'lucide-react';
+import { MessageSquare, Search, Database, FolderOpen, LayoutDashboard, Settings, Sparkles, Files } from 'lucide-react';
 import { ChatProvider } from '../context/chat-context';
 import { useChat } from '../../hooks/useChat';
 
@@ -11,6 +11,7 @@ export function Layout() {
     { name: 'Chat', href: '/', icon: MessageSquare },
     { name: 'Explorador de búsqueda', href: '/search', icon: Search },
     { name: 'Fuentes de conocimiento', href: '/sources', icon: Database },
+    { name: 'Documentos scrapeados', href: '/documents', icon: Files },
     { name: 'Agregar Conocimientos', href: '/knowledge', icon: FolderOpen },
     { name: 'Dashboard del sistema', href: '/dashboard', icon: LayoutDashboard },
     { name: 'Configuración', href: '/settings', icon: Settings },
