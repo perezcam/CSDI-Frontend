@@ -23,11 +23,16 @@ import { Badge } from '../components/ui/badge';
 import { useSearch, type SearchMode, type SearchResultItem } from '../../hooks/useSearch';
 import { useEvaluation } from '../../hooks/useEvaluation';
 import { getSourceTypeLabel } from '../../lib/sourceType';
+import { useQueryFeedbackComparison } from '../../hooks/useQueryFeedbackComparison';
 import type {
   EvaluationRankingResult,
   EvaluationRankingsResponse,
   EvaluationReport,
   ConfiguredSource,
+  QueryFeedbackComparableResult,
+  QueryFeedbackComparisonMode,
+  QueryFeedbackComparisonOption,
+  QueryFeedbackPreference,
   RetrievalStrategy,
   StrategyMetrics,
 } from '../../types/api';
@@ -61,6 +66,7 @@ export function Search() {
   const [selectedSourceIds, setSelectedSourceIds] = useState<string[]>([]);
   const { results, runs, isSearching, error, search, compareAll } = useSearch();
   const evaluation = useEvaluation();
+  const queryFeedbackComparison = useQueryFeedbackComparison();
   const hasSyncedInitialQuery = useRef(false);
 
   useEffect(() => {
@@ -85,11 +91,28 @@ export function Search() {
   const latestReport = evaluation.report;
   const bestNdcgStrategy = useBestStrategy(latestReport, 'ndcg_at_k');
 
-  const handleSearch = () => {
+  const handleSearch = async () => {
+    if (pageMode !== 'explore') return;
+    if (!query.trim()) return;
+
+    const activated = await queryFeedbackComparison.startComparison(query, topK[0]);
+    if (activated) {
+      return;
+    }
+
     if (searchMode === 'compare') {
       return compareAll(query, topK[0]);
     }
     return search(query, searchMode, topK[0]);
+  };
+
+  const handleSaveQueryFeedbackPreference = async (preference: QueryFeedbackPreference) => {
+    try {
+      await queryFeedbackComparison.savePreference(preference);
+      toast.success('Preferencia guardada');
+    } catch {
+      toast.error('No se pudo guardar la preferencia');
+    }
   };
 
   const handleSaveCurrentQuery = async () => {
@@ -174,15 +197,22 @@ export function Search() {
               <div className="flex gap-3">
                 <Input
                   value={query}
-                  onChange={(event) => setQuery(event.target.value)}
+                  onChange={(event) => {
+                    setQuery(event.target.value);
+                    queryFeedbackComparison.resetComparison();
+                  }}
                   placeholder="Ingresa tu consulta de búsqueda para probar o guardar en evaluación..."
                   className="flex-1 bg-[#1a2332] border-[#2d3748] text-white placeholder:text-slate-500"
-                  onKeyDown={(event) => event.key === 'Enter' && pageMode === 'explore' && handleSearch()}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' && pageMode === 'explore') {
+                      void handleSearch();
+                    }
+                  }}
                 />
                 {pageMode === 'explore' ? (
                   <Button
-                    onClick={handleSearch}
-                    disabled={isSearching || !query.trim()}
+                    onClick={() => void handleSearch()}
+                    disabled={isSearching || queryFeedbackComparison.isLoading || !query.trim()}
                     className="bg-gradient-to-br from-[#2563eb] to-[#1e40af] hover:from-[#1d4ed8] hover:to-[#1e3a8a] text-white shadow-lg shadow-blue-900/30"
                   >
                     <SearchIcon className="w-4 h-4 mr-2" />
@@ -224,6 +254,8 @@ export function Search() {
               runs={runs}
               searchMode={searchMode}
               compareRows={compareRows}
+              queryFeedbackComparison={queryFeedbackComparison}
+              onSaveQueryFeedbackPreference={handleSaveQueryFeedbackPreference}
             />
           ) : pageMode === 'evaluate' ? (
             <EvaluationPanel
@@ -500,6 +532,8 @@ function ExplorePanel({
   runs,
   searchMode,
   compareRows,
+  queryFeedbackComparison,
+  onSaveQueryFeedbackPreference,
 }: {
   error: string | null;
   isSearching: boolean;
@@ -507,7 +541,35 @@ function ExplorePanel({
   runs: ReturnType<typeof useSearch>['runs'];
   searchMode: ExplorerMode;
   compareRows: ReturnType<typeof useCompareRows>;
+  queryFeedbackComparison: ReturnType<typeof useQueryFeedbackComparison>;
+  onSaveQueryFeedbackPreference: (preference: QueryFeedbackPreference) => Promise<void>;
 }) {
+  if (queryFeedbackComparison.isLoading) {
+    return <LoadingState label="Preparando comparación de resultados..." />;
+  }
+  if (
+    queryFeedbackComparison.isComparisonActive &&
+    queryFeedbackComparison.optionA &&
+    queryFeedbackComparison.optionB
+  ) {
+    return (
+      <div className="space-y-4">
+        {queryFeedbackComparison.error && <ErrorBox message={queryFeedbackComparison.error} />}
+        <QueryFeedbackComparisonPanel
+          mode={queryFeedbackComparison.comparisonMode}
+          optionA={queryFeedbackComparison.optionA}
+          optionB={queryFeedbackComparison.optionB}
+          isSavingPreference={queryFeedbackComparison.isSavingPreference}
+          preferenceSaved={queryFeedbackComparison.preferenceSaved}
+          error={queryFeedbackComparison.error}
+          onSavePreference={onSaveQueryFeedbackPreference}
+        />
+      </div>
+    );
+  }
+  if (queryFeedbackComparison.error && queryFeedbackComparison.isComparisonActive) {
+    return <ErrorBox message={queryFeedbackComparison.error} />;
+  }
   if (error) return <ErrorBox message={error} />;
   if (isSearching) return <LoadingState label="Buscando..." />;
   if (results.length === 0 && runs.length === 0) {
@@ -530,6 +592,190 @@ function ExplorePanel({
       ) : (
         <SearchRunSection mode="hybrid" results={results} title="Resultados de Búsqueda" />
       )}
+    </div>
+  );
+}
+
+function QueryFeedbackComparisonPanel({
+  mode,
+  optionA,
+  optionB,
+  isSavingPreference,
+  preferenceSaved,
+  error,
+  onSavePreference,
+}: {
+  mode: QueryFeedbackComparisonMode;
+  optionA: QueryFeedbackComparisonOption;
+  optionB: QueryFeedbackComparisonOption;
+  isSavingPreference: boolean;
+  preferenceSaved: boolean;
+  error: string | null;
+  onSavePreference: (preference: QueryFeedbackPreference) => Promise<void>;
+}) {
+  return (
+    <div className="space-y-6">
+      <div className="bg-[#0f1419] border border-[#1a2332] rounded-lg p-5">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h2 className="font-semibold text-white">Comparación de resultados</h2>
+            <p className="text-sm text-slate-400 mt-2">
+              Te mostramos dos variantes de resultados. Indica cuál te ayuda más para mejorar futuras búsquedas.
+            </p>
+          </div>
+          <Badge className={mode === 'feedback' ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30' : 'bg-blue-500/15 text-blue-300 border border-blue-500/30'}>
+            {mode === 'feedback' ? 'Comparación con feedback previo' : 'Comparación con expansión'}
+          </Badge>
+        </div>
+        {preferenceSaved && (
+          <div className="mt-4 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-300">
+            Preferencia guardada. Se usará para mejorar futuras búsquedas.
+          </div>
+        )}
+        {error && (
+          <div className="mt-4 rounded-lg border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-300">
+            {error}
+          </div>
+        )}
+      </div>
+
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+        <QueryFeedbackOptionColumn option={optionA} />
+        <QueryFeedbackOptionColumn option={optionB} />
+      </div>
+
+      <div className="bg-[#0f1419] border border-[#1a2332] rounded-lg p-5">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
+          <Button
+            type="button"
+            onClick={() => void onSavePreference('prefer_a')}
+            disabled={isSavingPreference || preferenceSaved}
+            className="bg-blue-600 hover:bg-blue-700 text-white"
+          >
+            Prefiero A
+          </Button>
+          <Button
+            type="button"
+            onClick={() => void onSavePreference('prefer_b')}
+            disabled={isSavingPreference || preferenceSaved}
+            className="bg-blue-600 hover:bg-blue-700 text-white"
+          >
+            Prefiero B
+          </Button>
+          <Button
+            type="button"
+            onClick={() => void onSavePreference('both')}
+            disabled={isSavingPreference || preferenceSaved}
+            className="bg-[#1a2332] border border-[#2d3748] text-slate-200 hover:bg-[#243041]"
+          >
+            Ambas son útiles
+          </Button>
+          <Button
+            type="button"
+            onClick={() => void onSavePreference('neither')}
+            disabled={isSavingPreference || preferenceSaved}
+            className="bg-[#1a2332] border border-[#2d3748] text-slate-200 hover:bg-[#243041]"
+          >
+            Ninguna me sirve
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function QueryFeedbackOptionColumn({ option }: { option: QueryFeedbackComparisonOption }) {
+  return (
+    <div className="bg-[#0f1419] border border-[#1a2332] rounded-lg overflow-hidden">
+      <div className="px-5 py-4 bg-[#1a2332] border-b border-[#2d3748]">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <h3 className="font-semibold text-white">{option.id} · {option.label}</h3>
+            <p className="text-sm text-slate-400 mt-1">{option.description}</p>
+          </div>
+          <Badge className={option.strategy === 'feedback' ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30' : option.strategy === 'expanded' ? 'bg-blue-500/15 text-blue-300 border border-blue-500/30' : 'bg-slate-500/15 text-slate-300 border border-slate-500/30'}>
+            {option.strategy}
+          </Badge>
+        </div>
+      </div>
+      <div className="divide-y divide-[#1a2332]">
+        {option.results.slice(0, 5).map((result, index) => (
+          <QueryFeedbackComparableResultCard
+            key={`${option.id}-${result.chunk_id}`}
+            result={result}
+            rank={index + 1}
+          />
+        ))}
+        {option.results.length === 0 && (
+          <div className="p-5 text-sm text-slate-400">No hay resultados para esta opción.</div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function QueryFeedbackComparableResultCard({
+  result,
+  rank,
+}: {
+  result: QueryFeedbackComparableResult;
+  rank: number;
+}) {
+  return (
+    <div className="p-5">
+      <div className="flex items-start gap-4">
+        <div className="w-10 h-10 bg-[#1a2332] border border-[#2d3748] rounded-lg flex items-center justify-center flex-shrink-0">
+          <span className="font-semibold text-slate-300">#{rank}</span>
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-start justify-between gap-4">
+            <div className="min-w-0">
+              <h4 className="font-semibold text-white">{result.title || result.chunk_id}</h4>
+              <p className="text-xs text-slate-500 font-mono mt-1">{result.chunk_id}</p>
+            </div>
+            <div className="flex items-center gap-2 flex-shrink-0">
+              {result.feedback_applied && (
+                <Badge className="bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
+                  {result.feedback_match_type === 'semantic' ? 'Feedback semántico' : 'Feedback aplicado'}
+                </Badge>
+              )}
+              <div className="flex items-center gap-2">
+                <TrendingUp className="w-4 h-4 text-blue-400" />
+                <span className="font-semibold text-blue-400">{result.score.toFixed(4)}</span>
+              </div>
+            </div>
+          </div>
+          <div className="mt-3 space-y-2">
+            <p className="text-sm text-slate-400 line-clamp-4">{result.text}</p>
+            <div className="flex items-center gap-3 flex-wrap">
+              <span className="text-xs text-slate-500">Fuente: {result.source_id}</span>
+              <span className="text-xs text-slate-500 font-mono">Chunk: {result.chunk_id}</span>
+              {result.original_score !== undefined && (
+                <span className="text-xs text-amber-300">Score original: {result.original_score.toFixed(4)}</span>
+              )}
+              {result.adjusted_score !== undefined && (
+                <span className="text-xs text-emerald-300">Score ajustado: {result.adjusted_score.toFixed(4)}</span>
+              )}
+              {result.feedback_relevance !== undefined && result.feedback_relevance !== null && (
+                <span className="text-xs text-emerald-300">Relevancia: {result.feedback_relevance}</span>
+              )}
+            </div>
+            {result.url && (
+              <a
+                href={result.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs text-blue-400 hover:text-blue-300 inline-block"
+              >
+                {result.url}
+              </a>
+            )}
+            {result.breadcrumb && (
+              <p className="text-xs text-slate-500 italic">{result.breadcrumb}</p>
+            )}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
