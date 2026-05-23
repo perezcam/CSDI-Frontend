@@ -11,7 +11,7 @@ export function Layout() {
     { name: 'Chat', href: '/', icon: MessageSquare },
     { name: 'Explorador de búsqueda', href: '/search', icon: Search },
     { name: 'Fuentes de conocimiento', href: '/sources', icon: Database },
-    { name: 'Conocimiento', href: '/knowledge', icon: FolderOpen },
+    { name: 'Agregar Conocimientos', href: '/knowledge', icon: FolderOpen },
     { name: 'Dashboard del sistema', href: '/dashboard', icon: LayoutDashboard },
     { name: 'Configuración', href: '/settings', icon: Settings },
   ];
