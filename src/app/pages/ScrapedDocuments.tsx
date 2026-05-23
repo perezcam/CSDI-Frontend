@@ -24,7 +24,6 @@ import {
   SelectValue,
 } from '../components/ui/select';
 import { Skeleton } from '../components/ui/skeleton';
-import { Switch } from '../components/ui/switch';
 import { useScrapedDocuments } from '../../hooks/useScrapedDocuments';
 import { sourcesService } from '../../services/sources.service';
 import type { ConfiguredSource, ScrapedDocument } from '../../types/api';
@@ -36,7 +35,6 @@ export function ScrapedDocuments() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
   const [sourceId, setSourceId] = useState<string | null>(null);
-  const [activeOnly, setActiveOnly] = useState(true);
   const [selectedDocumentId, setSelectedDocumentId] = useState<string | null>(null);
   const [sources, setSources] = useState<ConfiguredSource[]>([]);
   const [sourcesError, setSourcesError] = useState<string | null>(null);
@@ -45,7 +43,6 @@ export function ScrapedDocuments() {
     page,
     page_size: pageSize,
     source_id: sourceId,
-    active_only: activeOnly,
   });
 
   useEffect(() => {
@@ -90,13 +87,7 @@ export function ScrapedDocuments() {
     setSelectedDocumentId(null);
   };
 
-  const handleActiveOnlyChange = (checked: boolean) => {
-    setActiveOnly(checked);
-    setPage(1);
-    setSelectedDocumentId(null);
-  };
-
-  return (
+return (
     <div className="h-full flex flex-col bg-[#0a0e1a]">
       <div className="bg-[#0f1419] border-b border-[#1a2332] px-6 py-4">
         <div className="flex items-center justify-between gap-4">
@@ -152,12 +143,6 @@ export function ScrapedDocuments() {
             </Select>
           </div>
 
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-[#1a2332] bg-[#0a0e1a] px-4 py-3">
-            <Label className="text-sm text-slate-300" htmlFor="active-only">
-              Solo documentos activos
-            </Label>
-            <Switch id="active-only" checked={activeOnly} onCheckedChange={handleActiveOnlyChange} />
-          </div>
         </div>
       </div>
 
@@ -362,12 +347,6 @@ function DocumentDetail({ document }: { document: ScrapedDocument | null }) {
           </div>
         </div>
 
-        <div className="pt-2">
-          <DetailLabel icon={<Database className="w-4 h-4" />} label="Orden backend" />
-          <p className="mt-2 text-xs text-slate-500">
-            La lista viene ordenada por fetched_at DESC, id DESC desde el backend.
-          </p>
-        </div>
       </div>
     </aside>
   );
