@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { chatService } from '../services/chat.service';
 import type { RagHistoryMessage, RagSource } from '../types/api';
 
@@ -22,6 +22,7 @@ interface StoredChatMessage {
 
 const CHAT_STORAGE_KEY = 'csdi_frontend_chat_messages_v1';
 const CHAT_SESSION_KEY = 'csdi_frontend_chat_session_v1';
+const CHAT_PENDING_KEY = 'csdi_frontend_chat_pending_v1';
 
 let inMemorySessionId: string | null = null;
 let inMemoryMessages: ChatMessage[] | null = null;
@@ -130,8 +131,12 @@ export function useChat() {
     inMemoryMessages = local;
     return local;
   });
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    return window.localStorage.getItem(CHAT_PENDING_KEY) !== null;
+  });
   const [error, setError] = useState<string | null>(null);
+  const recoveryFiredRef = useRef(false);
 
   useEffect(() => {
     persistMessages(messages);
@@ -177,6 +182,11 @@ export function useChat() {
     });
     setIsLoading(true);
 
+    // Persist pending query so a mid-generation reload can auto-retry
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem(CHAT_PENDING_KEY, query);
+    }
+
     try {
       const response = await chatService.query({ query, session_id: sessionId });
       const assistantMessage: ChatMessage = {
@@ -195,9 +205,55 @@ export function useChat() {
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error al conectar con el backend');
     } finally {
+      if (typeof window !== 'undefined') {
+        window.localStorage.removeItem(CHAT_PENDING_KEY);
+      }
       setIsLoading(false);
     }
   }, [isLoading, sessionId]);
+
+  // On mount: resume interrupted generation without adding a duplicate user message
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (recoveryFiredRef.current) return;
+    const pending = window.localStorage.getItem(CHAT_PENDING_KEY);
+    if (!pending) return;
+
+    recoveryFiredRef.current = true;
+    let cancelled = false;
+    setIsLoading(true);
+
+    chatService.query({ query: pending, session_id: sessionId })
+      .then(response => {
+        if (cancelled) return;
+        const assistantMessage: ChatMessage = {
+          id: (Date.now() + 1).toString(),
+          type: 'assistant',
+          content: response.answer,
+          timestamp: new Date(),
+          sources: sortSourcesByDisplayPriority(response.sources),
+          model: response.model,
+        };
+        setMessages(prev => {
+          const next = [...prev, assistantMessage];
+          persistMessages(next);
+          return next;
+        });
+      })
+      .catch(err => {
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : 'Error al conectar con el backend');
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          window.localStorage.removeItem(CHAT_PENDING_KEY);
+          setIsLoading(false);
+        }
+      });
+
+    return () => { cancelled = true; };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const clearMessages = useCallback(() => {
     setMessages([]);

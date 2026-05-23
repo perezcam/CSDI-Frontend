@@ -225,7 +225,7 @@ export function Knowledge() {
       <div className="bg-[#0f1419] border-b border-[#1a2332] px-6 py-4">
         <div className="flex items-center justify-between max-w-6xl mx-auto">
           <div>
-            <h1 className="font-semibold text-white">Conocimiento</h1>
+            <h1 className="font-semibold text-white">Agregar Nuevos Conocimientos</h1>
             <p className="text-sm text-slate-400">Agrega nuevas fuentes al sistema de búsqueda</p>
           </div>
           {uploadItems.length > 0 && (

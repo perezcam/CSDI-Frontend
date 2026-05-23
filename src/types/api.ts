@@ -128,8 +128,23 @@ export interface ConfiguredSource {
   max_depth: number;
   indexed_chunks: number;
   last_ingest_at?: string | null;
+  ingest_status?: 'idle' | 'crawling' | 'indexing' | 'completed' | 'error';
+  progress_pct?: number;
   sample_url?: string | null;
   source_kind?: 'configured' | 'url_manual' | 'upload_file';
+}
+
+export interface IngestProgressResponse {
+  source_id: string;
+  phase: 'idle' | 'crawling' | 'indexing' | 'completed' | 'error';
+  pages_total: number;
+  pages_scraped: number;
+  chunks_indexed: number;
+  progress_pct: number;
+  started_at: string | null;
+  finished_at: string | null;
+  last_ingest_at: string | null;
+  error: string | null;
 }
 
 export interface PipelineConfig {
@@ -179,6 +194,7 @@ export interface MetricsResponse {
   faiss_vectors: number;
   bm25_documents: number;
   bm25_terms: number;
+  total_documents: number;
 }
 
 // ─── Upload ───────────────────────────────────────────────────────────────────

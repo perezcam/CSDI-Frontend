@@ -11,10 +11,12 @@ export function Chat() {
   const [input, setInput] = useState('');
   const { messages, isLoading, error, sendMessage } = useChatContext();
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: { preventDefault(): void }) => {
     e.preventDefault();
-    await sendMessage(input);
+    const query = input.trim();
+    if (!query || isLoading) return;
     setInput('');
+    await sendMessage(query);
   };
 
   const currentSources = messages.length > 0
@@ -98,25 +100,26 @@ export function Chat() {
         {/* Input */}
         <div className="border-t border-[#1a2332] bg-[#0f1419] p-4">
           <form onSubmit={handleSubmit} className="max-w-3xl mx-auto">
-            <div className="flex gap-3">
+            <div className="flex items-stretch gap-3">
               <Textarea
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
+                disabled={isLoading}
                 placeholder="Escribe tu pregunta sobre la base de conocimiento..."
-                className="flex-1 min-h-[60px] resize-none bg-[#1a2332] border-[#2d3748] text-white placeholder:text-slate-500"
+                className="flex-1 min-h-[60px] resize-none bg-[#1a2332] border-[#2d3748] text-white placeholder:text-slate-500 disabled:opacity-60 disabled:cursor-not-allowed"
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && !e.shiftKey) {
                     e.preventDefault();
-                    handleSubmit(e);
+                    void handleSubmit(e);
                   }
                 }}
               />
               <Button
                 type="submit"
                 disabled={isLoading || !input.trim()}
-                className="bg-gradient-to-br from-[#2563eb] to-[#1e40af] hover:from-[#1d4ed8] hover:to-[#1e3a8a] text-white shadow-lg shadow-blue-900/30"
+                className="self-stretch aspect-square flex-shrink-0 p-0 bg-gradient-to-br from-[#2563eb] to-[#1e40af] hover:from-[#1d4ed8] hover:to-[#1e3a8a] text-white shadow-lg shadow-blue-900/30"
               >
-                <Send className="w-4 h-4" />
+                {isLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
               </Button>
             </div>
           </form>
