@@ -198,6 +198,15 @@ export interface MetricsResponse {
   total_documents: number;
 }
 
+// ─── Deindex ─────────────────────────────────────────────────────────────────
+
+export interface DeindexResponse {
+  source_id: string;
+  chunks_deleted: number;
+  vectors_deleted: number;
+  documents_deleted: number;
+}
+
 // ─── Upload ───────────────────────────────────────────────────────────────────
 
 export interface UploadResponse {

@@ -1,5 +1,5 @@
 import { api } from '../lib/api';
-import type { ConfiguredSource, IngestProgressResponse, IngestRequest, IngestResponse, UploadResponse } from '../types/api';
+import type { ConfiguredSource, DeindexResponse, IngestProgressResponse, IngestRequest, IngestResponse, UploadResponse } from '../types/api';
 
 export const sourcesService = {
   /** List all pre-configured documentation sources */
@@ -12,6 +12,10 @@ export const sourcesService = {
   /** Poll ingestion progress for a source */
   progress: (sourceId: string) =>
     api.get<IngestProgressResponse>(`/api/v1/ingest/progress/${encodeURIComponent(sourceId)}`),
+
+  /** Remove all indexed data for a source */
+  deindex: (sourceId: string) =>
+    api.delete<DeindexResponse>(`/api/v1/ingest/sources/${encodeURIComponent(sourceId)}`),
 
   /** Upload file and run chunk + index pipeline immediately */
   upload: (file: File, sourceId?: string) => {
