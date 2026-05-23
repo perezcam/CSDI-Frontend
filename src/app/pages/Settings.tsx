@@ -58,6 +58,9 @@ export function Settings() {
       bm25_weight: Number(draft.bm25_weight.toFixed(2)),
       vector_weight: Number(draft.vector_weight.toFixed(2)),
       temperature: Number(draft.temperature.toFixed(2)),
+      query_feedback_comparison_probability: Number(
+        draft.query_feedback_comparison_probability.toFixed(2),
+      ),
       llm_base_url: draft.llm_base_url.trim(),
       llm_api_key: draft.llm_api_key.trim(),
       insuff: {
@@ -250,10 +253,58 @@ export function Settings() {
 
               <ToggleRow
                 title="Habilitar HyDE"
-                description="Activa la expansión hipotética de la consulta para retrieval semántico."
+                description="Activa HyDE: genera una hipótesis con el LLM para enriquecer la búsqueda semántica."
                 checked={draft?.hyde_enabled ?? false}
                 onCheckedChange={(checked) => updateDraft(setDraft, 'hyde_enabled', checked)}
               />
+
+              <div className="rounded-lg border border-[#2d3748] bg-[#1a2332] p-4">
+                <div className="mb-4">
+                  <h3 className="text-sm font-medium text-white">Retroalimentación de búsqueda</h3>
+                  <p className="text-xs text-slate-500 mt-1 max-w-2xl">
+                    Controla la frecuencia del flujo A/B que recopila preferencias del usuario y
+                    permite reutilizar feedback histórico en búsquedas futuras. No modifica la
+                    configuración de HyDE.
+                  </p>
+                </div>
+
+                <div className="flex items-start justify-between gap-4 mb-3">
+                  <div>
+                    <Label className="text-sm font-medium text-white">
+                      Probabilidad de comparación A/B
+                    </Label>
+                    <p className="text-xs text-slate-500 mt-1 max-w-2xl">
+                      Define qué porcentaje de búsquedas elegibles mostrarán dos variantes de
+                      resultados para que el usuario indique cuál fue más útil.
+                    </p>
+                  </div>
+                  <span className="text-sm font-semibold text-blue-400 whitespace-nowrap">
+                    {draft
+                      ? `${(draft.query_feedback_comparison_probability * 100).toFixed(0)}% · ${draft.query_feedback_comparison_probability.toFixed(2)}`
+                      : '25% · 0.25'}
+                  </span>
+                </div>
+
+                <Slider
+                  min={0}
+                  max={1}
+                  step={0.05}
+                  value={draft ? [draft.query_feedback_comparison_probability] : [0.25]}
+                  disabled={!draft}
+                  onValueChange={(value) => {
+                    updateDraft(
+                      setDraft,
+                      'query_feedback_comparison_probability',
+                      Number(value[0].toFixed(2)),
+                    );
+                  }}
+                  className="w-full"
+                />
+
+                <div className="mt-3 text-xs text-slate-500">
+                  0% nunca · 25% ocasional · 100% siempre/demo
+                </div>
+              </div>
 
               <div className="grid grid-cols-3 gap-4">
                 <NumberField

@@ -159,6 +159,7 @@ export interface PipelineConfig {
   hyde_enabled: boolean;
   llm_base_url: string;
   llm_api_key: string;
+  query_feedback_comparison_probability: number;
   provider: string;
   available_models: string[];
   insuff: InsuffConfig;
@@ -286,4 +287,162 @@ export interface EvaluationSummary {
   available_strategies: RetrievalStrategy[];
   latest_report_exists: boolean;
   latest_averages: Partial<Record<RetrievalStrategy, Partial<StrategyMetrics>>>;
+}
+
+// ─── Query Feedback ──────────────────────────────────────────────────────────
+
+export type QueryFeedbackRelevance = 0 | 1 | 2 | 3;
+
+export interface QueryFeedbackSearchRequest {
+  query: string;
+  top_k?: number;
+  source_ids?: string[] | null;
+  expansion_enabled?: boolean;
+  top_k_feedback?: number;
+  max_expansion_terms?: number;
+}
+
+export interface QueryFeedbackSearchResultItem {
+  chunk_id: string;
+  score: number;
+  source_id: string;
+  url: string;
+  title: string;
+  breadcrumb: string;
+  text: string;
+}
+
+export interface QueryFeedbackSearchResponse {
+  original_query: string;
+  expanded_query: string;
+  expansion_terms: string[];
+  method: string;
+  strategy: string;
+  expansion_enabled: boolean;
+  feedback_documents_used: number;
+  results: QueryFeedbackSearchResultItem[];
+}
+
+export interface QueryFeedbackFeedbackRequest {
+  query: string;
+  chunk_id: string;
+  relevance: QueryFeedbackRelevance;
+  source_id?: string | null;
+  notes?: string | null;
+  session_id?: string | null;
+}
+
+export interface QueryFeedbackFeedbackResponse {
+  id: number;
+  query: string;
+  normalized_query: string;
+  chunk_id: string;
+  source_id?: string | null;
+  relevance: QueryFeedbackRelevance;
+  notes?: string | null;
+  session_id?: string | null;
+  created_at: string;
+  updated_at?: string | null;
+  stored: boolean;
+}
+
+export interface QueryFeedbackSearchWithFeedbackRequest {
+  query: string;
+  top_k?: number;
+  source_ids?: string[] | null;
+  expansion_enabled?: boolean;
+  top_k_feedback?: number;
+  max_expansion_terms?: number;
+  feedback_enabled?: boolean;
+  semantic_feedback_enabled?: boolean;
+  semantic_similarity_threshold?: number;
+}
+
+export interface QueryFeedbackAdjustedSearchResultItem {
+  chunk_id: string;
+  original_score: number;
+  adjusted_score: number;
+  feedback_boost: number;
+  feedback_applied: boolean;
+  feedback_relevance?: QueryFeedbackRelevance | null;
+  feedback_source_query?: string | null;
+  feedback_query_similarity?: number | null;
+  feedback_match_type?: 'exact' | 'semantic' | null;
+  source_id: string;
+  url: string;
+  title: string;
+  breadcrumb: string;
+  text: string;
+}
+
+export interface QueryFeedbackSearchWithFeedbackResponse {
+  original_query: string;
+  expanded_query: string;
+  expansion_terms: string[];
+  method: string;
+  strategy: string;
+  expansion_enabled: boolean;
+  feedback_enabled: boolean;
+  semantic_feedback_enabled: boolean;
+  semantic_similarity_threshold: number;
+  feedback_applied: boolean;
+  feedback_items_used: number;
+  matched_feedback_queries: Array<Record<string, string | number>>;
+  feedback_documents_used: number;
+  results: QueryFeedbackAdjustedSearchResultItem[];
+}
+
+export interface QueryFeedbackSummaryResponse {
+  total_feedback_items: number;
+  queries_with_feedback: number;
+  positive_feedback: number;
+  negative_feedback: number;
+  marginal_feedback: number;
+  average_relevance: number;
+}
+
+export interface QueryFeedbackItemResponse {
+  id: number;
+  query: string;
+  normalized_query: string;
+  chunk_id: string;
+  source_id?: string | null;
+  relevance: QueryFeedbackRelevance;
+  notes?: string | null;
+  session_id?: string | null;
+  created_at: string;
+  updated_at?: string | null;
+}
+
+export interface QueryFeedbackByQueryResponse {
+  query: string;
+  normalized_query: string;
+  items: QueryFeedbackItemResponse[];
+}
+
+export type QueryFeedbackComparisonMode = 'none' | 'expanded' | 'feedback';
+
+export type QueryFeedbackPreference = 'prefer_a' | 'prefer_b' | 'both' | 'neither';
+
+export interface QueryFeedbackComparableResult {
+  chunk_id: string;
+  score: number;
+  original_score?: number;
+  adjusted_score?: number;
+  feedback_applied?: boolean;
+  feedback_relevance?: QueryFeedbackRelevance | null;
+  feedback_match_type?: 'exact' | 'semantic' | null;
+  source_id: string;
+  url: string;
+  title: string;
+  breadcrumb: string;
+  text: string;
+}
+
+export interface QueryFeedbackComparisonOption {
+  id: 'A' | 'B';
+  label: string;
+  description: string;
+  strategy: 'standard' | 'expanded' | 'feedback';
+  results: QueryFeedbackComparableResult[];
 }
