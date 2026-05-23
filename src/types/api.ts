@@ -11,6 +11,12 @@ export interface RagSource {
   chunk_id: string;
   url: string;
   title: string;
+  source_type?: SourceType;
+  retrieval_method?: string;
+  relevance_score?: number;
+  freshness_score?: number;
+  display_priority?: number;
+  rank?: number;
 }
 
 export interface RagQueryResponse {
@@ -20,6 +26,7 @@ export interface RagQueryResponse {
   model: string;
   prompt_tokens: number;
   completion_tokens: number;
+  web_search?: unknown;
 }
 
 export interface RagHistoryMessage {
@@ -44,10 +51,18 @@ export interface SearchRequest {
   source_ids?: string[];
 }
 
+export type SourceType = 'corpus' | 'web_cache' | (string & {});
+
 /** Full chunk metadata — returned by hybrid search */
 export interface SearchChunk {
   chunk_id: string;
   score: number;
+  relevance_score?: number;
+  freshness_score?: number;
+  display_priority?: number;
+  rank?: number;
+  source_type?: SourceType;
+  retrieval_method?: string;
   source_id: string;
   url: string;
   title: string;

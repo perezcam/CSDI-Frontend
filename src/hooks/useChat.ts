@@ -26,6 +26,18 @@ const CHAT_SESSION_KEY = 'csdi_frontend_chat_session_v1';
 let inMemorySessionId: string | null = null;
 let inMemoryMessages: ChatMessage[] | null = null;
 
+function sortSourcesByDisplayPriority(sources?: RagSource[]): RagSource[] | undefined {
+  if (!sources) return undefined;
+
+  return [...sources].sort((a, b) => {
+    const aPriority = a.display_priority ?? Number.NEGATIVE_INFINITY;
+    const bPriority = b.display_priority ?? Number.NEGATIVE_INFINITY;
+
+    if (aPriority !== bPriority) return bPriority - aPriority;
+    return (a.rank ?? 0) - (b.rank ?? 0);
+  });
+}
+
 function getOrCreateSessionId(): string {
   if (inMemorySessionId) return inMemorySessionId;
   if (typeof window === 'undefined') return 'server-session';
@@ -71,6 +83,7 @@ function parseStoredMessages(value: string | null): ChatMessage[] {
       .map((message) => ({
         ...message,
         timestamp: new Date(message.timestamp),
+        sources: sortSourcesByDisplayPriority(message.sources),
       }));
   } catch {
     return [];
@@ -91,7 +104,7 @@ function fromHistory(messages: RagHistoryMessage[]): ChatMessage[] {
       type: message.type,
       content: message.content,
       timestamp: new Date(message.timestamp),
-      sources: message.sources,
+      sources: sortSourcesByDisplayPriority(message.sources),
       model: message.model,
     }));
 }
@@ -171,7 +184,7 @@ export function useChat() {
         type: 'assistant',
         content: response.answer,
         timestamp: new Date(),
-        sources: response.sources,
+        sources: sortSourcesByDisplayPriority(response.sources),
         model: response.model,
       };
       setMessages((prev) => {
