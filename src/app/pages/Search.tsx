@@ -694,7 +694,7 @@ function QueryFeedbackOptionColumn({ option }: { option: QueryFeedbackComparison
             <p className="text-sm text-slate-400 mt-1">{option.description}</p>
           </div>
           <Badge className={option.strategy === 'feedback' ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30' : option.strategy === 'expanded' ? 'bg-blue-500/15 text-blue-300 border border-blue-500/30' : 'bg-slate-500/15 text-slate-300 border border-slate-500/30'}>
-            {option.strategy}
+            {getQueryFeedbackStrategyLabel(option.strategy)}
           </Badge>
         </div>
       </div>
@@ -1450,6 +1450,14 @@ function getSearchModeColor(mode: ExplorerMode) {
     case 'vector': return 'bg-purple-500/20 text-purple-400 border-purple-500/30';
     case 'hybrid': return 'bg-blue-500/20 text-blue-400 border-blue-500/30';
     case 'compare': return 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30';
+  }
+}
+
+function getQueryFeedbackStrategyLabel(strategy: QueryFeedbackComparisonOption['strategy']) {
+  switch (strategy) {
+    case 'standard': return 'Estándar';
+    case 'expanded': return 'Con expansión';
+    case 'feedback': return 'Con feedback';
   }
 }
 
