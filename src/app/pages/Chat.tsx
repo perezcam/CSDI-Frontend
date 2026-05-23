@@ -19,9 +19,19 @@ export function Chat() {
     await sendMessage(query);
   };
 
-  const currentSources = messages.length > 0
+  const rawSources = messages.length > 0
     ? (messages[messages.length - 1].sources ?? [])
     : [];
+
+  const currentSources = Array.from(
+    [...rawSources]
+      .sort((a, b) => (b.display_priority ?? 0) - (a.display_priority ?? 0))
+      .reduce((map, s) => {
+        if (!map.has(s.url)) map.set(s.url, s);
+        return map;
+      }, new Map<string, typeof rawSources[0]>())
+      .values(),
+  );
 
   const renderSourceTypeBadge = (sourceType?: string) => {
     const label = getSourceTypeLabel(sourceType);
